@@ -18,14 +18,14 @@ type MockHandler struct {
 }
 
 // NewMockHandler создает новый mock-обработчик
-func NewMockHandler(config config.TimeSourceConfig, logger *logrus.Logger) *MockHandler {
+func NewMockHandler(config config.TimeSourceConfig, logger *logrus.Logger) (TimeSourceHandler, error) {
 	return &MockHandler{
 		config: config,
 		logger: logger,
 		status: ConnectionStatus{
 			Connected: true,
 		},
-	}
+	}, nil
 }
 
 // Start запускает mock-обработчик

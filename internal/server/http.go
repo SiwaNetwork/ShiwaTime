@@ -11,6 +11,7 @@ import (
 	
 	"github.com/shiwatime/shiwatime/internal/clock"
 	"github.com/shiwatime/shiwatime/internal/config"
+	"github.com/shiwatime/shiwatime/internal/protocols"
 )
 
 // HTTPServer HTTP сервер для веб-интерфейса
@@ -131,7 +132,7 @@ func (s *HTTPServer) registerRoutes(router *gin.Engine) {
 
 // handleStatus обрабатывает запрос статуса
 func (s *HTTPServer) handleStatus(c *gin.Context) {
-	primarySources, secondarySources := s.clockManager.GetSources()
+	primarySources, secondarySources := s.clockManager.GetSourcesByPriority()
 	selectedSource := s.clockManager.GetSelectedSource()
 	
 	response := StatusResponse{
@@ -143,8 +144,16 @@ func (s *HTTPServer) handleStatus(c *gin.Context) {
 	}
 	
 	if selectedSource != nil {
-		sourceResp := convertSource(selectedSource)
-		response.SelectedSource = &sourceResp
+		// Find the name of the selected source
+		allSources := s.clockManager.GetSources()
+		for name, handler := range allSources {
+			if handler == selectedSource {
+				sourceResp := convertSource(name, handler)
+				sourceResp.Selected = true
+				response.SelectedSource = &sourceResp
+				break
+			}
+		}
 	}
 	
 	c.JSON(http.StatusOK, response)
@@ -152,7 +161,7 @@ func (s *HTTPServer) handleStatus(c *gin.Context) {
 
 // handleSources обрабатывает запрос списка источников
 func (s *HTTPServer) handleSources(c *gin.Context) {
-	primarySources, secondarySources := s.clockManager.GetSources()
+	primarySources, secondarySources := s.clockManager.GetSourcesByPriority()
 	
 	response := map[string]interface{}{
 		"primary_sources":   convertSources(primarySources),
@@ -167,21 +176,12 @@ func (s *HTTPServer) handleSources(c *gin.Context) {
 func (s *HTTPServer) handleSourceDetails(c *gin.Context) {
 	sourceID := c.Param("id")
 	
-	primarySources, secondarySources := s.clockManager.GetSources()
-	allSources := append(primarySources, secondarySources...)
+	allSources := s.clockManager.GetSources()
 	
-	for _, source := range allSources {
-		if source.ID == sourceID {
+	for name, source := range allSources {
+		if name == sourceID {
 			response := map[string]interface{}{
-				"source": convertSource(source),
-				"metrics": map[string]interface{}{
-					"packets_received": source.Metrics.PacketsReceived,
-					"packets_sent":     source.Metrics.PacketsSent,
-					"sync_count":       source.Metrics.SyncCount,
-					"error_count":      source.Metrics.ErrorCount,
-					"offset_history":   convertDurations(source.Metrics.OffsetHistory),
-					"delay_history":    convertDurations(source.Metrics.DelayHistory),
-				},
+				"source": convertSource(name, source),
 				"timestamp": time.Now(),
 			}
 			
@@ -322,8 +322,7 @@ func (s *HTTPServer) handleUI(c *gin.Context) {
 // handleMetrics обрабатывает запрос метрик
 func (s *HTTPServer) handleMetrics(c *gin.Context) {
 	// Простые метрики в формате Prometheus
-	primarySources, secondarySources := s.clockManager.GetSources()
-	allSources := append(primarySources, secondarySources...)
+	allSources := s.clockManager.GetSources()
 	
 	metrics := fmt.Sprintf("# HELP shiwatime_clock_state Current clock state (0=unknown, 1=synchronized, 2=unsynchronized)\n")
 	metrics += fmt.Sprintf("# TYPE shiwatime_clock_state gauge\n")
@@ -337,7 +336,8 @@ func (s *HTTPServer) handleMetrics(c *gin.Context) {
 	metrics += fmt.Sprintf("# TYPE shiwatime_sources_active gauge\n")
 	activeCount := 0
 	for _, source := range allSources {
-		if source.Status.Active {
+		status := source.GetStatus()
+		if status.Connected {
 			activeCount++
 		}
 	}
@@ -348,29 +348,43 @@ func (s *HTTPServer) handleMetrics(c *gin.Context) {
 }
 
 // convertSources конвертирует источники в ответ
-func convertSources(sources []*clock.TimeSource) []TimeSourceResponse {
-	result := make([]TimeSourceResponse, len(sources))
-	for i, source := range sources {
-		result[i] = convertSource(source)
+func convertSources(sources map[string]protocols.TimeSourceHandler) []TimeSourceResponse {
+	result := make([]TimeSourceResponse, 0, len(sources))
+	for name, handler := range sources {
+		result = append(result, convertSource(name, handler))
 	}
 	return result
 }
 
 // convertSource конвертирует источник в ответ
-func convertSource(source *clock.TimeSource) TimeSourceResponse {
-	resp := TimeSourceResponse{
-		ID:         source.ID,
-		Protocol:   source.Protocol,
-		Active:     source.Status.Active,
-		Selected:   source.Status.Selected,
-		LastSync:   source.Status.LastSync,
-		Offset:     source.Status.Offset.String(),
-		Quality:    source.Status.Quality,
-		ErrorCount: source.Status.ErrorCount,
+func convertSource(name string, handler protocols.TimeSourceHandler) TimeSourceResponse {
+	status := handler.GetStatus()
+	config := handler.GetConfig()
+	
+	timeInfo, err := handler.GetTimeInfo()
+	offset := "unknown"
+	quality := 0
+	lastSync := time.Time{}
+	
+	if err == nil && timeInfo != nil {
+		offset = timeInfo.Offset.String()
+		quality = timeInfo.Quality
+		lastSync = timeInfo.Timestamp
 	}
 	
-	if source.Status.LastError != nil {
-		resp.LastError = source.Status.LastError.Error()
+	resp := TimeSourceResponse{
+		ID:         name,
+		Protocol:   config.Type,
+		Active:     status.Connected,
+		Selected:   false, // Will be set separately for selected source
+		LastSync:   lastSync,
+		Offset:     offset,
+		Quality:    quality,
+		ErrorCount: int(status.ErrorCount),
+	}
+	
+	if status.LastError != nil {
+		resp.LastError = status.LastError.Error()
 	}
 	
 	return resp

@@ -121,10 +121,7 @@ func runShiwaTime(cmd *cobra.Command, args []string) {
 	}
 	
 	// Создаем менеджер часов
-	clockManager, err := clock.NewManager(cfg, logger, metricsClient)
-	if err != nil {
-		logger.Fatal("Failed to create clock manager: ", err)
-	}
+	clockManager := clock.NewManager(cfg.ShiwaTime, logger)
 	
 	// Создаем HTTP сервер если включен
 	var httpServer *server.HTTPServer

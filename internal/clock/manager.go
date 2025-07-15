@@ -3,13 +3,14 @@ package clock
 import (
 	"context"
 	"fmt"
+	"math"
 	"sync"
 	"time"
 
 	"github.com/sirupsen/logrus"
 	"github.com/shiwatime/shiwatime/internal/config"
-	"github.com/shiwatime/shiwatime/internal/metrics"
 	"github.com/shiwatime/shiwatime/internal/protocols"
+	"golang.org/x/sys/unix"
 )
 
 // ClockState представляет состояние системных часов
@@ -21,6 +22,8 @@ const (
 	ClockStateUnsynchronized
 	ClockStateFreeRunning
 	ClockStateHoldover
+	ClockStateStepping
+	ClockStateSynchronizing
 )
 
 func (cs ClockState) String() string {
@@ -33,135 +36,195 @@ func (cs ClockState) String() string {
 		return "free_running"
 	case ClockStateHoldover:
 		return "holdover"
+	case ClockStateStepping:
+		return "stepping"
+	case ClockStateSynchronizing:
+		return "synchronizing"
 	default:
 		return "unknown"
 	}
 }
 
-// TimeSource представляет источник времени
-type TimeSource struct {
-	ID       string
-	Protocol string
-	Config   config.TimeSourceConfig
-	Handler  protocols.TimeSourceHandler
-	Status   SourceStatus
-	Metrics  *SourceMetrics
+// PIDController implements a PID controller for clock discipline
+type PIDController struct {
+	Kp, Ki, Kd       float64  // PID gains
+	integral         float64  // Integral term accumulator
+	prevError        float64  // Previous error for derivative
+	integralLimit    float64  // Integral windup limit
+	outputLimit      float64  // Output saturation limit
+	lastTime         time.Time
 }
 
-// SourceStatus статус источника времени
-type SourceStatus struct {
-	Active         bool
-	LastSync       time.Time
-	Offset         time.Duration
-	Quality        int
-	ErrorCount     int
-	LastError      error
-	Selected       bool
-	Priority       int
+// NewPIDController creates a new PID controller
+func NewPIDController(kp, ki, kd, integralLimit, outputLimit float64) *PIDController {
+	return &PIDController{
+		Kp:            kp,
+		Ki:            ki, 
+		Kd:            kd,
+		integralLimit: integralLimit,
+		outputLimit:   outputLimit,
+		lastTime:      time.Now(),
+	}
 }
 
-// SourceMetrics метрики источника времени
-type SourceMetrics struct {
-	PacketsReceived uint64
-	PacketsSent     uint64
-	SyncCount       uint64
-	ErrorCount      uint64
-	OffsetHistory   []time.Duration
-	DelayHistory    []time.Duration
+// Update calculates PID controller output
+func (pid *PIDController) Update(error, dt float64) float64 {
+	// Proportional term
+	p := pid.Kp * error
+	
+	// Integral term with windup protection
+	pid.integral += error * dt
+	if pid.integral > pid.integralLimit {
+		pid.integral = pid.integralLimit
+	} else if pid.integral < -pid.integralLimit {
+		pid.integral = -pid.integralLimit
+	}
+	i := pid.Ki * pid.integral
+	
+	// Derivative term
+	d := 0.0
+	if dt > 0 {
+		d = pid.Kd * (error - pid.prevError) / dt
+	}
+	pid.prevError = error
+	
+	// Calculate output with saturation
+	output := p + i + d
+	if output > pid.outputLimit {
+		output = pid.outputLimit
+	} else if output < -pid.outputLimit {
+		output = -pid.outputLimit
+	}
+	
+	return output
 }
 
-// Manager управляет синхронизацией системных часов
+// Reset resets the PID controller state
+func (pid *PIDController) Reset() {
+	pid.integral = 0
+	pid.prevError = 0
+	pid.lastTime = time.Now()
+}
+
+// Manager manages time sources and clock synchronization
 type Manager struct {
-	config        *config.Config
+	config        config.ShiwaTimeConfig
 	logger        *logrus.Logger
-	metricsClient *metrics.Client
 	
-	// Источники времени
-	primarySources   []*TimeSource
-	secondarySources []*TimeSource
+	mu            sync.RWMutex
+	running       bool
+	sources       map[string]protocols.TimeSourceHandler
+	selectedSource protocols.TimeSourceHandler // Currently selected time source
+	state         ClockState
 	
-	// Состояние
-	mu           sync.RWMutex
-	state        ClockState
-	selectedSource *TimeSource
-	lastAdjustment time.Time
-	stepLimit      time.Duration
+	// PID controller state
+	pidController *PIDController
 	
-	// Контроль
+	// Statistics and filtering
+	offsetHistory    []time.Duration
+	delayHistory     []time.Duration
+	jitterHistory    []time.Duration
+	filterWindow     int
+	
+	// Clock discipline parameters
+	sigma            float64  // Allan deviation threshold
+	rho              float64  // Correlation threshold
+	
+	// Frequency correction
+	freqOffset       float64  // Current frequency offset in ppb
+	freqDrift        float64  // Frequency drift rate
+	
+	// Kernel discipline
+	kernelSync       bool
+	
 	ctx    context.Context
 	cancel context.CancelFunc
-	wg     sync.WaitGroup
 }
 
 // NewManager создает новый менеджер часов
-func NewManager(cfg *config.Config, logger *logrus.Logger, metricsClient *metrics.Client) (*Manager, error) {
+func NewManager(config config.ShiwaTimeConfig, logger *logrus.Logger) *Manager {
 	ctx, cancel := context.WithCancel(context.Background())
 	
-	stepLimit, err := parseDuration(cfg.ShiwaTime.ClockSync.StepLimit)
-	if err != nil {
-		stepLimit = 15 * time.Minute // значение по умолчанию
-	}
+	// Initialize PID controller with default values
+	pidController := NewPIDController(
+		1.0,   // KP
+		0.1,   // KI  
+		0.01,  // KD
+		100.0, // Integrator limit
+		1000000, // 1 second output limit
+	)
 	
-	m := &Manager{
-		config:        cfg,
+	return &Manager{
+		config:        config,
 		logger:        logger,
-		metricsClient: metricsClient,
 		state:         ClockStateUnknown,
-		stepLimit:     stepLimit,
+		sources:       make(map[string]protocols.TimeSourceHandler),
+		pidController: pidController,
+		filterWindow:  50,    // Default filter window
+		sigma:         1e-6,  // Default sigma threshold
+		rho:           0.8,   // Default rho threshold
+		kernelSync:    true,  // Default kernel sync
 		ctx:           ctx,
 		cancel:        cancel,
 	}
-	
-	// Инициализируем источники времени
-	if err := m.initTimeSources(); err != nil {
-		cancel()
-		return nil, fmt.Errorf("failed to initialize time sources: %w", err)
-	}
-	
-	return m, nil
 }
 
 // Start запускает менеджер часов
 func (m *Manager) Start() error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	
+	if m.running {
+		return fmt.Errorf("clock manager already running")
+	}
+	
 	m.logger.Info("Starting clock manager")
+	m.running = true
 	
-	// Запускаем обработчики источников времени
-	for _, source := range m.primarySources {
-		if !source.Config.Disable {
-			m.wg.Add(1)
-			go m.runTimeSource(source)
+	// Инициализируем источники времени (объединяем primary и secondary)
+	allSources := append(m.config.ClockSync.PrimaryClocks, m.config.ClockSync.SecondaryClocks...)
+	for i, sourceConfig := range allSources {
+		name := fmt.Sprintf("source_%d", i)
+		
+		handler, err := protocols.NewTimeSourceHandler(sourceConfig, m.logger)
+		if err != nil {
+			m.logger.WithError(err).Errorf("Failed to create handler for source %d", i)
+			continue
 		}
+		
+		if err := handler.Start(); err != nil {
+			m.logger.WithError(err).Errorf("Failed to start source %d", i)
+			continue
+		}
+		
+		m.sources[name] = handler
+		m.logger.WithField("source", name).Info("Time source started")
 	}
 	
-	for _, source := range m.secondarySources {
-		if !source.Config.Disable {
-			m.wg.Add(1)
-			go m.runTimeSource(source)
-		}
-	}
-	
-	// Запускаем основной цикл управления часами
-	m.wg.Add(1)
-	go m.clockManagementLoop()
-	
-	// Запускаем цикл отправки метрик
-	m.wg.Add(1)
-	go m.metricsLoop()
+	// Запускаем цикл синхронизации
+	go m.syncLoop()
 	
 	return nil
 }
 
 // Stop останавливает менеджер часов
 func (m *Manager) Stop() error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	
+	if !m.running {
+		return nil
+	}
+	
 	m.logger.Info("Stopping clock manager")
 	
 	m.cancel()
-	m.wg.Wait()
+	m.running = false
 	
 	// Останавливаем все источники времени
-	for _, source := range append(m.primarySources, m.secondarySources...) {
-		if source.Handler != nil {
-			source.Handler.Stop()
+	for name, handler := range m.sources {
+		if err := handler.Stop(); err != nil {
+			m.logger.WithError(err).WithField("source", name).Error("Failed to stop time source")
 		}
 	}
 	
@@ -175,366 +238,353 @@ func (m *Manager) GetState() ClockState {
 	return m.state
 }
 
-// GetSelectedSource возвращает выбранный источник времени
-func (m *Manager) GetSelectedSource() *TimeSource {
+// GetSources возвращает источники времени
+func (m *Manager) GetSources() map[string]protocols.TimeSourceHandler {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	
+	sources := make(map[string]protocols.TimeSourceHandler)
+	for name, handler := range m.sources {
+		sources[name] = handler
+	}
+	return sources
+}
+
+// GetSelectedSource возвращает текущий выбранный источник времени
+func (m *Manager) GetSelectedSource() protocols.TimeSourceHandler {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	return m.selectedSource
 }
 
-// GetSources возвращает все источники времени
-func (m *Manager) GetSources() ([]*TimeSource, []*TimeSource) {
+// GetSourcesByPriority возвращает источники, разделенные на первичные и вторичные
+func (m *Manager) GetSourcesByPriority() (map[string]protocols.TimeSourceHandler, map[string]protocols.TimeSourceHandler) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	return m.primarySources, m.secondarySources
-}
-
-// initTimeSources инициализирует источники времени
-func (m *Manager) initTimeSources() error {
-	// Инициализируем первичные источники
-	for i, sourceConfig := range m.config.ShiwaTime.ClockSync.PrimaryClocks {
-		source, err := m.createTimeSource(fmt.Sprintf("primary_%d", i), sourceConfig, true)
-		if err != nil {
-			return fmt.Errorf("failed to create primary source %d: %w", i, err)
+	
+	primary := make(map[string]protocols.TimeSourceHandler)
+	secondary := make(map[string]protocols.TimeSourceHandler)
+	
+	for name, handler := range m.sources {
+		config := handler.GetConfig()
+		// Use weight as priority indicator: higher weight = primary
+		if config.Weight >= 5 { // High weight sources (5+) are primary
+			primary[name] = handler
+		} else { // Lower weight sources (<5) are secondary
+			secondary[name] = handler
 		}
-		m.primarySources = append(m.primarySources, source)
 	}
 	
-	// Инициализируем вторичные источники
-	for i, sourceConfig := range m.config.ShiwaTime.ClockSync.SecondaryClocks {
-		source, err := m.createTimeSource(fmt.Sprintf("secondary_%d", i), sourceConfig, false)
-		if err != nil {
-			return fmt.Errorf("failed to create secondary source %d: %w", i, err)
+	return primary, secondary
+}
+
+// syncLoop основной цикл синхронизации
+func (m *Manager) syncLoop() {
+	ticker := time.NewTicker(time.Second)
+	defer ticker.Stop()
+	
+	for {
+		select {
+		case <-m.ctx.Done():
+			return
+		case <-ticker.C:
+			if err := m.synchronizeClock(); err != nil {
+				m.logger.WithError(err).Debug("Clock synchronization failed")
+			}
 		}
-		m.secondarySources = append(m.secondarySources, source)
+	}
+}
+
+// synchronizeClock выполняет синхронизацию часов
+func (m *Manager) synchronizeClock() error {
+	source := m.selectBestSource()
+	if source == nil {
+		m.mu.Lock()
+		m.selectedSource = nil
+		m.state = ClockStateUnsynchronized
+		m.mu.Unlock()
+		return fmt.Errorf("no suitable time source available")
+	}
+	
+	// Update selected source
+	m.mu.Lock()
+	m.selectedSource = source
+	m.mu.Unlock()
+	
+	timeInfo, err := source.GetTimeInfo()
+	if err != nil {
+		return err
+	}
+	
+	// Обновляем статистику
+	m.updateStatistics(timeInfo)
+	
+	// Проверяем нужно ли делать step или adjustment
+	offset := timeInfo.Offset
+	stepThreshold := 500 * time.Millisecond // Default threshold
+	
+	if math.Abs(float64(offset)) > float64(stepThreshold) {
+		return m.stepClock(offset)
+	}
+	
+	// Используем PID контроллер для плавной подстройки
+	return m.adjustClockPID(offset)
+}
+
+// selectBestSource выбирает лучший источник времени
+func (m *Manager) selectBestSource() protocols.TimeSourceHandler {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	
+	var bestHandler protocols.TimeSourceHandler
+	var bestScore float64
+	
+	for _, handler := range m.sources {
+		status := handler.GetStatus()
+		if !status.Connected {
+			continue
+		}
+		
+		timeInfo, err := handler.GetTimeInfo()
+		if err != nil {
+			continue
+		}
+		
+		// Простой scoring algorithm
+		score := float64(timeInfo.Quality)
+		config := handler.GetConfig()
+		score *= float64(config.Weight)
+		
+		if score > bestScore {
+			bestScore = score
+			bestHandler = handler
+		}
+	}
+	
+	return bestHandler
+}
+
+// updateStatistics обновляет статистику времени
+func (m *Manager) updateStatistics(info *protocols.TimeInfo) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	
+	// Add to history with sliding window
+	m.offsetHistory = append(m.offsetHistory, info.Offset)
+	m.delayHistory = append(m.delayHistory, info.Delay)
+	
+	// Calculate jitter
+	if len(m.offsetHistory) > 1 {
+		prevOffset := m.offsetHistory[len(m.offsetHistory)-2]
+		jitter := time.Duration(math.Abs(float64(info.Offset - prevOffset)))
+		m.jitterHistory = append(m.jitterHistory, jitter)
+	}
+	
+	// Maintain window size
+	if len(m.offsetHistory) > m.filterWindow {
+		m.offsetHistory = m.offsetHistory[1:]
+	}
+	if len(m.delayHistory) > m.filterWindow {
+		m.delayHistory = m.delayHistory[1:]
+	}
+	if len(m.jitterHistory) > m.filterWindow {
+		m.jitterHistory = m.jitterHistory[1:]
+	}
+}
+
+// stepClock делает step системных часов
+func (m *Manager) stepClock(offset time.Duration) error {
+	m.logger.WithField("offset", offset).Info("Stepping system clock")
+	
+	if m.kernelSync {
+		// Use adjtimex to step the clock
+		var timex unix.Timex
+		timex.Modes = unix.ADJ_SETOFFSET
+		
+		if offset >= 0 {
+			timex.Time.Sec = int64(offset / time.Second)
+			timex.Time.Usec = int64((offset % time.Second) / time.Microsecond)
+		} else {
+			negOffset := -offset
+			timex.Time.Sec = -int64(negOffset / time.Second)
+			timex.Time.Usec = -int64((negOffset % time.Second) / time.Microsecond)
+		}
+		
+		_, err := unix.Adjtimex(&timex)
+		if err != nil {
+			return fmt.Errorf("failed to step clock: %w", err)
+		}
+	}
+	
+	m.state = ClockStateStepping
+	m.pidController.Reset() // Reset PID after step
+	
+	return nil
+}
+
+// adjustClockPID подстраивает часы используя PID контроллер
+func (m *Manager) adjustClockPID(offset time.Duration) error {
+	now := time.Now()
+	dt := now.Sub(m.pidController.lastTime).Seconds()
+	m.pidController.lastTime = now
+	
+	if dt <= 0 {
+		return nil
+	}
+	
+	// Convert offset to seconds for PID calculation
+	errorSeconds := float64(offset) / float64(time.Second)
+	
+	// Calculate PID output (frequency adjustment in ppb)
+	freqAdjustment := m.pidController.Update(errorSeconds, dt)
+	
+	// Apply frequency adjustment
+	if m.kernelSync {
+		err := m.adjustKernelFrequency(freqAdjustment)
+		if err != nil {
+			return err
+		}
+	}
+	
+	m.freqOffset = freqAdjustment
+	m.state = ClockStateSynchronizing
+	
+	m.logger.WithFields(logrus.Fields{
+		"offset":           offset,
+		"freq_adjustment":  freqAdjustment,
+		"error_seconds":    errorSeconds,
+		"dt":               dt,
+	}).Debug("PID clock adjustment")
+	
+	return nil
+}
+
+// adjustKernelFrequency подстраивает частоту ядра
+func (m *Manager) adjustKernelFrequency(ppb float64) error {
+	var timex unix.Timex
+	timex.Modes = unix.ADJ_FREQUENCY
+	
+	// Convert ppb to kernel frequency units (2^-16 ppm)
+	timex.Freq = int64(ppb * 65536 / 1000000)
+	
+	_, err := unix.Adjtimex(&timex)
+	if err != nil {
+		return fmt.Errorf("failed to adjust kernel frequency: %w", err)
 	}
 	
 	return nil
 }
 
-// createTimeSource создает источник времени
-func (m *Manager) createTimeSource(id string, sourceConfig config.TimeSourceConfig, isPrimary bool) (*TimeSource, error) {
-	handler, err := protocols.CreateHandler(sourceConfig.Protocol, sourceConfig, m.logger)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create handler for protocol %s: %w", sourceConfig.Protocol, err)
-	}
-	
-	priority := 100 // базовый приоритет
-	if isPrimary {
-		priority = 200
-	}
-	
-	source := &TimeSource{
-		ID:       id,
-		Protocol: sourceConfig.Protocol,
-		Config:   sourceConfig,
-		Handler:  handler,
-		Status: SourceStatus{
-			Priority: priority,
-		},
-		Metrics: &SourceMetrics{},
-	}
-	
-	return source, nil
-}
-
-// runTimeSource запускает обработку источника времени
-func (m *Manager) runTimeSource(source *TimeSource) {
-	defer m.wg.Done()
-	
-	m.logger.WithFields(logrus.Fields{
-		"source_id": source.ID,
-		"protocol":  source.Protocol,
-	}).Info("Starting time source")
-	
-	ticker := time.NewTicker(time.Second)
-	defer ticker.Stop()
-	
-	for {
-		select {
-		case <-m.ctx.Done():
-			return
-		case <-ticker.C:
-			m.processTimeSource(source)
-		}
-	}
-}
-
-// processTimeSource обрабатывает обновления от источника времени
-func (m *Manager) processTimeSource(source *TimeSource) {
-	if source.Config.Disable || source.Config.MonitorOnly {
-		return
-	}
-	
-	// Получаем информацию о времени от источника
-	timeInfo, err := source.Handler.GetTimeInfo()
-	if err != nil {
-		m.mu.Lock()
-		source.Status.LastError = err
-		source.Status.ErrorCount++
-		source.Status.Active = false
-		m.mu.Unlock()
-		
-		source.Metrics.ErrorCount++
-		
-		m.logger.WithFields(logrus.Fields{
-			"source_id": source.ID,
-			"error":     err,
-		}).Warn("Failed to get time info from source")
-		return
-	}
-	
-	// Обновляем статус источника
-	m.mu.Lock()
-	source.Status.Active = true
-	source.Status.LastSync = time.Now()
-	source.Status.Offset = timeInfo.Offset
-	source.Status.Quality = timeInfo.Quality
-	source.Status.LastError = nil
-	m.mu.Unlock()
-	
-	// Обновляем метрики
-	source.Metrics.SyncCount++
-	source.Metrics.PacketsReceived++
-	
-	// Сохраняем историю смещений
-	if len(source.Metrics.OffsetHistory) >= 100 {
-		source.Metrics.OffsetHistory = source.Metrics.OffsetHistory[1:]
-	}
-	source.Metrics.OffsetHistory = append(source.Metrics.OffsetHistory, timeInfo.Offset)
-	
-	m.logger.WithFields(logrus.Fields{
-		"source_id": source.ID,
-		"offset":    timeInfo.Offset,
-		"quality":   timeInfo.Quality,
-	}).Debug("Received time info from source")
-}
-
-// clockManagementLoop основной цикл управления часами
-func (m *Manager) clockManagementLoop() {
-	defer m.wg.Done()
-	
-	ticker := time.NewTicker(time.Second)
-	defer ticker.Stop()
-	
-	for {
-		select {
-		case <-m.ctx.Done():
-			return
-		case <-ticker.C:
-			m.manageClock()
-		}
-	}
-}
-
-// manageClock управляет синхронизацией системных часов
-func (m *Manager) manageClock() {
-	// Выбираем лучший источник времени
-	selectedSource := m.selectBestSource()
-	
-	m.mu.Lock()
-	previousSelected := m.selectedSource
-	m.selectedSource = selectedSource
-	
-	// Обновляем флаги выбранности
-	for _, source := range append(m.primarySources, m.secondarySources...) {
-		source.Status.Selected = (source == selectedSource)
-	}
-	m.mu.Unlock()
-	
-	if selectedSource == nil {
-		m.setState(ClockStateUnsynchronized)
-		return
-	}
-	
-	// Логируем смену источника
-	if previousSelected != selectedSource {
-		m.logger.WithFields(logrus.Fields{
-			"new_source": selectedSource.ID,
-			"protocol":   selectedSource.Protocol,
-		}).Info("Selected new time source")
-	}
-	
-	// Применяем коррекцию времени
-	if m.config.ShiwaTime.ClockSync.AdjustClock {
-		m.adjustSystemClock(selectedSource)
-	}
-	
-	m.setState(ClockStateSynchronized)
-}
-
-// selectBestSource выбирает лучший доступный источник времени
-func (m *Manager) selectBestSource() *TimeSource {
-	var bestSource *TimeSource
-	bestScore := -1
-	
-	// Сначала проверяем первичные источники
-	for _, source := range m.primarySources {
-		if !source.Status.Active || source.Config.Disable || source.Config.MonitorOnly {
-			continue
-		}
-		
-		score := m.calculateSourceScore(source)
-		if score > bestScore {
-			bestScore = score
-			bestSource = source
-		}
-	}
-	
-	// Если нет активных первичных источников, проверяем вторичные
-	if bestSource == nil {
-		for _, source := range m.secondarySources {
-			if !source.Status.Active || source.Config.Disable || source.Config.MonitorOnly {
-				continue
-			}
-			
-			score := m.calculateSourceScore(source)
-			if score > bestScore {
-				bestScore = score
-				bestSource = source
-			}
-		}
-	}
-	
-	return bestSource
-}
-
-// calculateSourceScore вычисляет счет качества источника времени
-func (m *Manager) calculateSourceScore(source *TimeSource) int {
-	score := source.Status.Priority
-	
-	// Вычитаем баллы за ошибки
-	score -= source.Status.ErrorCount * 10
-	
-	// Добавляем баллы за качество
-	score += source.Status.Quality
-	
-	// Вычитаем баллы за большие смещения
-	offsetMs := source.Status.Offset.Milliseconds()
-	if offsetMs < 0 {
-		offsetMs = -offsetMs
-	}
-	score -= int(offsetMs)
-	
-	return score
-}
-
-// adjustSystemClock корректирует системные часы
-func (m *Manager) adjustSystemClock(source *TimeSource) {
-	offset := source.Status.Offset
-	
-	// Проверяем ограничения на коррекцию
-	if offset.Abs() > m.stepLimit {
-		m.logger.WithFields(logrus.Fields{
-			"offset":     offset,
-			"step_limit": m.stepLimit,
-		}).Warn("Offset exceeds step limit, clock adjustment skipped")
-		return
-	}
-	
-	// Применяем коррекцию (здесь была бы реальная системная коррекция)
-	m.logger.WithFields(logrus.Fields{
-		"offset":    offset,
-		"source_id": source.ID,
-	}).Info("Adjusting system clock")
-	
-	m.lastAdjustment = time.Now()
-}
-
-// setState устанавливает состояние часов
-func (m *Manager) setState(state ClockState) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	
-	if m.state != state {
-		m.logger.WithFields(logrus.Fields{
-			"old_state": m.state.String(),
-			"new_state": state.String(),
-		}).Info("Clock state changed")
-		m.state = state
-	}
-}
-
-// metricsLoop отправляет метрики
-func (m *Manager) metricsLoop() {
-	defer m.wg.Done()
-	
-	if m.metricsClient == nil {
-		return
-	}
-	
-	ticker := time.NewTicker(10 * time.Second)
-	defer ticker.Stop()
-	
-	for {
-		select {
-		case <-m.ctx.Done():
-			return
-		case <-ticker.C:
-			m.sendMetrics()
-		}
-	}
-}
-
-// sendMetrics отправляет метрики в Elasticsearch
-func (m *Manager) sendMetrics() {
+// GetStatistics возвращает статистику часов
+func (m *Manager) GetStatistics() ClockStatistics {
 	m.mu.RLock()
-	state := m.state
-	selectedSource := m.selectedSource
-	sources := append(m.primarySources, m.secondarySources...)
-	m.mu.RUnlock()
+	defer m.mu.RUnlock()
 	
-	// Отправляем общие метрики
-	doc := map[string]interface{}{
-		"@timestamp":      time.Now(),
-		"clock_state":     state.String(),
-		"selected_source": "",
+	stats := ClockStatistics{
+		State:         m.state,
+		FreqOffset:    m.freqOffset,
+		FreqDrift:     m.freqDrift,
+		KernelSync:    m.kernelSync,
+		SourceCount:   len(m.sources),
 	}
 	
-	if selectedSource != nil {
-		doc["selected_source"] = selectedSource.ID
+	if len(m.offsetHistory) > 0 {
+		stats.MeanOffset = m.calculateMean(m.offsetHistory)
+		stats.MaxOffset = m.calculateMax(m.offsetHistory)
+		stats.MinOffset = m.calculateMin(m.offsetHistory)
 	}
 	
-	m.metricsClient.SendMetric("shiwatime_clock", doc)
-	
-	// Отправляем метрики источников
-	for _, source := range sources {
-		sourceDoc := map[string]interface{}{
-			"@timestamp":       time.Now(),
-			"source_id":        source.ID,
-			"protocol":         source.Protocol,
-			"active":           source.Status.Active,
-			"selected":         source.Status.Selected,
-			"offset_ns":        source.Status.Offset.Nanoseconds(),
-			"quality":          source.Status.Quality,
-			"error_count":      source.Status.ErrorCount,
-			"packets_received": source.Metrics.PacketsReceived,
-			"sync_count":       source.Metrics.SyncCount,
-		}
-		
-		if source.Status.LastError != nil {
-			sourceDoc["last_error"] = source.Status.LastError.Error()
-		}
-		
-		m.metricsClient.SendMetric("shiwatime_source", sourceDoc)
+	if len(m.delayHistory) > 0 {
+		stats.MeanDelay = m.calculateMean(m.delayHistory)
 	}
+	
+	if len(m.jitterHistory) > 0 {
+		stats.MeanJitter = m.calculateMean(m.jitterHistory)
+	}
+	
+	stats.AllanDeviation = m.calculateAllanDeviation()
+	stats.Stable = len(m.offsetHistory) > 10 && stats.AllanDeviation < m.sigma
+	
+	return stats
 }
 
-// parseDuration парсит строку длительности с поддержкой дней
-func parseDuration(s string) (time.Duration, error) {
-	if s == "" {
-		return 0, fmt.Errorf("empty duration string")
+// Helper functions for statistics
+func (m *Manager) calculateMean(values []time.Duration) time.Duration {
+	if len(values) == 0 {
+		return 0
 	}
 	
-	// Поддерживаем дни
-	if len(s) > 1 && s[len(s)-1] == 'd' {
-		days := s[:len(s)-1]
-		d, err := time.ParseDuration(days + "h")
-		if err != nil {
-			return 0, err
-		}
-		return d * 24, nil
+	var sum time.Duration
+	for _, v := range values {
+		sum += v
 	}
-	
-	return time.ParseDuration(s)
+	return sum / time.Duration(len(values))
 }
+
+func (m *Manager) calculateMax(values []time.Duration) time.Duration {
+	if len(values) == 0 {
+		return 0
+	}
+	
+	max := values[0]
+	for _, v := range values[1:] {
+		if v > max {
+			max = v
+		}
+	}
+	return max
+}
+
+func (m *Manager) calculateMin(values []time.Duration) time.Duration {
+	if len(values) == 0 {
+		return 0
+	}
+	
+	min := values[0]
+	for _, v := range values[1:] {
+		if v < min {
+			min = v
+		}
+	}
+	return min
+}
+
+func (m *Manager) calculateAllanDeviation() float64 {
+	if len(m.offsetHistory) < 3 {
+		return 0
+	}
+	
+	n := len(m.offsetHistory)
+	sum := 0.0
+	
+	for i := 0; i < n-2; i++ {
+		x1 := float64(m.offsetHistory[i])
+		x2 := float64(m.offsetHistory[i+1])
+		x3 := float64(m.offsetHistory[i+2])
+		
+		diff := (x3 - 2*x2 + x1) / 2.0
+		sum += diff * diff
+	}
+	
+	variance := sum / float64(n-2)
+	return math.Sqrt(variance / 2.0)
+}
+
+// ClockStatistics содержит статистику работы часов
+type ClockStatistics struct {
+	State           ClockState    `json:"state"`
+	FreqOffset      float64       `json:"freq_offset"`
+	FreqDrift       float64       `json:"freq_drift"`
+	KernelSync      bool          `json:"kernel_sync"`
+	SourceCount     int           `json:"source_count"`
+	
+	// Statistics
+	MeanOffset      time.Duration `json:"mean_offset"`
+	MaxOffset       time.Duration `json:"max_offset"`
+	MinOffset       time.Duration `json:"min_offset"`
+	MeanDelay       time.Duration `json:"mean_delay"`
+	MeanJitter      time.Duration `json:"mean_jitter"`
+	AllanDeviation  float64       `json:"allan_deviation"`
+	Stable          bool          `json:"stable"`
+}
+

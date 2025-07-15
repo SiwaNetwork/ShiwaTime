@@ -120,12 +120,36 @@ func (s *CLIServer) handleStatusCommand(sess ssh.Session) {
 	io.WriteString(sess, fmt.Sprintf("Clock State: %s\n", state.String()))
 	
 	if selectedSource != nil {
+		// Find the name of the selected source
+		allSources := s.clockManager.GetSources()
+		var sourceName string
+		for name, handler := range allSources {
+			if handler == selectedSource {
+				sourceName = name
+				break
+			}
+		}
+		
+		config := selectedSource.GetConfig()
+		status := selectedSource.GetStatus()
+		timeInfo, err := selectedSource.GetTimeInfo()
+		
 		io.WriteString(sess, fmt.Sprintf("Selected Source: %s (%s)\n", 
-			selectedSource.ID, selectedSource.Protocol))
-		io.WriteString(sess, fmt.Sprintf("  Offset: %s\n", selectedSource.Status.Offset))
-		io.WriteString(sess, fmt.Sprintf("  Quality: %d\n", selectedSource.Status.Quality))
-		io.WriteString(sess, fmt.Sprintf("  Last Sync: %s\n", 
-			selectedSource.Status.LastSync.Format(time.RFC3339)))
+			sourceName, config.Type))
+		
+		if err == nil && timeInfo != nil {
+			io.WriteString(sess, fmt.Sprintf("  Offset: %s\n", timeInfo.Offset))
+			io.WriteString(sess, fmt.Sprintf("  Quality: %d\n", timeInfo.Quality))
+			io.WriteString(sess, fmt.Sprintf("  Last Sync: %s\n", 
+				timeInfo.Timestamp.Format(time.RFC3339)))
+		} else {
+			io.WriteString(sess, "  Status: No time info available\n")
+		}
+		
+		io.WriteString(sess, fmt.Sprintf("  Connected: %v\n", status.Connected))
+		if status.LastError != nil {
+			io.WriteString(sess, fmt.Sprintf("  Last Error: %s\n", status.LastError.Error()))
+		}
 	} else {
 		io.WriteString(sess, "No source selected\n")
 	}
@@ -135,38 +159,61 @@ func (s *CLIServer) handleStatusCommand(sess ssh.Session) {
 
 // handleSourcesCommand обрабатывает команду sources
 func (s *CLIServer) handleSourcesCommand(sess ssh.Session) {
-	primarySources, secondarySources := s.clockManager.GetSources()
+	primarySources, secondarySources := s.clockManager.GetSourcesByPriority()
+	selectedSource := s.clockManager.GetSelectedSource()
 	
 	io.WriteString(sess, "Primary Sources:\n")
-	for _, source := range primarySources {
+	for name, handler := range primarySources {
 		status := "inactive"
-		if source.Status.Active {
+		handlerStatus := handler.GetStatus()
+		config := handler.GetConfig()
+		
+		if handlerStatus.Connected {
 			status = "active"
 		}
-		if source.Status.Selected {
+		if handler == selectedSource {
 			status = "selected"
 		}
 		
+		timeInfo, err := handler.GetTimeInfo()
+		offset := "unknown"
+		quality := 0
+		if err == nil && timeInfo != nil {
+			offset = timeInfo.Offset.String()
+			quality = timeInfo.Quality
+		}
+		
 		io.WriteString(sess, fmt.Sprintf("  %s (%s) - %s\n", 
-			source.ID, source.Protocol, status))
+			name, config.Type, status))
 		io.WriteString(sess, fmt.Sprintf("    Offset: %s, Quality: %d\n", 
-			source.Status.Offset, source.Status.Quality))
+			offset, quality))
 	}
 	
 	io.WriteString(sess, "\nSecondary Sources:\n")
-	for _, source := range secondarySources {
+	for name, handler := range secondarySources {
 		status := "inactive"
-		if source.Status.Active {
+		handlerStatus := handler.GetStatus()
+		config := handler.GetConfig()
+		
+		if handlerStatus.Connected {
 			status = "active"
 		}
-		if source.Status.Selected {
+		if handler == selectedSource {
 			status = "selected"
 		}
 		
+		timeInfo, err := handler.GetTimeInfo()
+		offset := "unknown"
+		quality := 0
+		if err == nil && timeInfo != nil {
+			offset = timeInfo.Offset.String()
+			quality = timeInfo.Quality
+		}
+		
 		io.WriteString(sess, fmt.Sprintf("  %s (%s) - %s\n", 
-			source.ID, source.Protocol, status))
+			name, config.Type, status))
 		io.WriteString(sess, fmt.Sprintf("    Offset: %s, Quality: %d\n", 
-			source.Status.Offset, source.Status.Quality))
+			offset, quality))
 	}
 	
 	io.WriteString(sess, "\n")

@@ -216,6 +216,6 @@ func CreateHandler(protocol string, config config.TimeSourceConfig, logger *logr
 	case "phc":
 		return NewPHCHandler(config, logger)
 	default:
-		return NewMockHandler(config, logger), nil
+		return NewMockHandler(config, logger)
 	}
 }

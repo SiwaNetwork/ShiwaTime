@@ -1,5 +1,7 @@
 package config
 
+import "time"
+
 // Config представляет основную конфигурацию ShiwaTime
 type Config struct {
 	ShiwaTime ShiwaTimeConfig `yaml:"shiwatime"`
@@ -42,53 +44,102 @@ type ClockSyncConfig struct {
 
 // TimeSourceConfig конфигурация источника времени
 type TimeSourceConfig struct {
-	Protocol              string            `yaml:"protocol"`
-	Disable               bool              `yaml:"disable,omitempty"`
-	MonitorOnly           bool              `yaml:"monitor_only,omitempty"`
+	Type       string `yaml:"type" json:"type"`
+	Host       string `yaml:"host" json:"host"`
+	Port       int    `yaml:"port" json:"port"`
+	Interface  string `yaml:"interface" json:"interface"`
+	Device     string `yaml:"device" json:"device"`
+	Weight     int    `yaml:"weight" json:"weight"`
 	
-	// PTP специфичные настройки
-	Domain                int               `yaml:"domain,omitempty"`
-	Interface             string            `yaml:"interface,omitempty"`
-	ServeUnicast          bool              `yaml:"serve_unicast,omitempty"`
-	ServeMulticast        bool              `yaml:"serve_multicast,omitempty"`
-	ServerOnly            bool              `yaml:"server_only,omitempty"`
-	AnnounceInterval      int               `yaml:"announce_interval,omitempty"`
-	SyncInterval          int               `yaml:"sync_interval,omitempty"`
-	DelayRequestInterval  int               `yaml:"delayrequest_interval,omitempty"`
-	UnicastMasterTable    []string          `yaml:"unicast_master_table,omitempty"`
-	DelayStrategy         string            `yaml:"delay_strategy,omitempty"`
-	HybridE2E             bool              `yaml:"hybrid_e2e,omitempty"`
-	Priority1             int               `yaml:"priority1,omitempty"`
-	Priority2             int               `yaml:"priority2,omitempty"`
-	UseLayer2             bool              `yaml:"use_layer2,omitempty"`
-	Group                 string            `yaml:"group,omitempty"`
-	Profile               string            `yaml:"profile,omitempty"`
-	LogSource             string            `yaml:"logsource,omitempty"`
-	AsymmetryCompensation int64             `yaml:"asymmetry_compensation,omitempty"`
-	MaxPacketsPerSecond   int               `yaml:"max_packets_per_second,omitempty"`
-	PeerID                string            `yaml:"peer_id,omitempty"`
+	// PTP-specific fields
+	Domain         int    `yaml:"domain" json:"domain"`
+	TransportType  string `yaml:"transport_type" json:"transport_type"`
+	NetworkTransport string `yaml:"network_transport" json:"network_transport"`
+	ClockClass     int    `yaml:"clock_class" json:"clock_class"`
+	Priority1      int    `yaml:"priority1" json:"priority1"`
+	Priority2      int    `yaml:"priority2" json:"priority2"`
+	LogAnnounceInterval   int `yaml:"log_announce_interval" json:"log_announce_interval"`
+	LogSyncInterval       int `yaml:"log_sync_interval" json:"log_sync_interval"`
+	LogDelayReqInterval   int `yaml:"log_delay_req_interval" json:"log_delay_req_interval"`
 	
-	// NTP специфичные настройки
-	IP                    string            `yaml:"ip,omitempty"`
-	PollInterval          string            `yaml:"pollinterval,omitempty"`
+	// PPS-specific fields
+	PPSMode       string `yaml:"pps_mode" json:"pps_mode"`
+	GPIOPin       int    `yaml:"gpio_pin" json:"gpio_pin"`
+	PPSKernel     bool   `yaml:"pps_kernel" json:"pps_kernel"`
+	PPSAssert     bool   `yaml:"pps_assert" json:"pps_assert"`
+	PPSClear      bool   `yaml:"pps_clear" json:"pps_clear"`
 	
-	// PPS специфичные настройки
-	Pin                   int               `yaml:"pin,omitempty"`
-	Index                 int               `yaml:"index,omitempty"`
-	CableDelay            int64             `yaml:"cable_delay,omitempty"`
-	EdgeMode              string            `yaml:"edge_mode,omitempty"`
-	Atomic                bool              `yaml:"atomic,omitempty"`
-	LinkedDevice          string            `yaml:"linked_device,omitempty"`
+	// PHC-specific fields
+	PHCIndex      int    `yaml:"phc_index" json:"phc_index"`
+	PHCDevice     string `yaml:"phc_device" json:"phc_device"`
 	
-	// NMEA специфичные настройки
-	Device                string            `yaml:"device,omitempty"`
-	Baud                  int               `yaml:"baud,omitempty"`
-	Offset                int64             `yaml:"offset,omitempty"`
+	// NMEA-specific fields
+	BaudRate      int    `yaml:"baud_rate" json:"baud_rate"`
+	DataBits      int    `yaml:"data_bits" json:"data_bits"`
+	StopBits      int    `yaml:"stop_bits" json:"stop_bits"`
+	Parity        string `yaml:"parity" json:"parity"`
 	
-	// Timecard специфичные настройки
-	CardConfig            []string          `yaml:"card_config,omitempty"`
-	OscillatorType        string            `yaml:"oscillator_type,omitempty"`
-	OCPDevice             int               `yaml:"ocp_device,omitempty"`
+	// Timecard-specific fields
+	TimecardType  string `yaml:"timecard_type" json:"timecard_type"`
+	Refclock      string `yaml:"refclock" json:"refclock"`
+	
+	// Polling configuration
+	PollingInterval time.Duration `yaml:"polling_interval" json:"polling_interval"`
+	PollingBurst    int           `yaml:"polling_burst" json:"polling_burst"`
+	
+	// Quality thresholds
+	MaxOffset     time.Duration `yaml:"max_offset" json:"max_offset"`
+	MaxDelay      time.Duration `yaml:"max_delay" json:"max_delay"`
+	MaxJitter     time.Duration `yaml:"max_jitter" json:"max_jitter"`
+	
+	// Advanced options
+	Trust        bool              `yaml:"trust" json:"trust"`
+	PreferKernel bool              `yaml:"prefer_kernel" json:"prefer_kernel"`
+	TOS          int               `yaml:"tos" json:"tos"`
+	TTL          int               `yaml:"ttl" json:"ttl"`
+	Options      map[string]string `yaml:"options" json:"options"`
+}
+
+// ClockConfig конфигурация системных часов  
+type ClockConfig struct {
+	Algorithm     string        `yaml:"algorithm" json:"algorithm"`
+	Disciplining  string        `yaml:"disciplining" json:"disciplining"`
+	
+	// Source selection parameters
+	PrimarySource   string `yaml:"primary_source" json:"primary_source"`
+	SecondarySource string `yaml:"secondary_source" json:"secondary_source"`
+	FallbackSource  string `yaml:"fallback_source" json:"fallback_source"`
+	
+	// Clock adjustment parameters
+	MaxAdjustment   time.Duration `yaml:"max_adjustment" json:"max_adjustment"`
+	StepThreshold   time.Duration `yaml:"step_threshold" json:"step_threshold"`
+	PanicThreshold  time.Duration `yaml:"panic_threshold" json:"panic_threshold"`
+	
+	// PID controller parameters (for advanced clock control)
+	KP            float64 `yaml:"kp" json:"kp"`               // Proportional gain
+	KI            float64 `yaml:"ki" json:"ki"`               // Integral gain  
+	KD            float64 `yaml:"kd" json:"kd"`               // Derivative gain
+	Integrator    float64 `yaml:"integrator" json:"integrator"` // Integrator limit
+	
+	// Statistics and filtering
+	StatisticsLength int           `yaml:"statistics_length" json:"statistics_length"`
+	FilterLength     int           `yaml:"filter_length" json:"filter_length"`
+	SigmaThreshold   float64       `yaml:"sigma_threshold" json:"sigma_threshold"`
+	RhoThreshold     float64       `yaml:"rho_threshold" json:"rho_threshold"`
+	
+	// Kernel discipline
+	KernelSync       bool `yaml:"kernel_sync" json:"kernel_sync"`
+	KernelPPS        bool `yaml:"kernel_pps" json:"kernel_pps"`
+	SyncToHWClock    bool `yaml:"sync_to_hw_clock" json:"sync_to_hw_clock"`
+	
+	// Hardware timestamping
+	HWTimestamping   bool `yaml:"hw_timestamping" json:"hw_timestamping"`
+	TimestampAll     bool `yaml:"timestamp_all" json:"timestamp_all"`
+	
+	// Leap second handling
+	LeapSecFile      string `yaml:"leapsecfile" json:"leapsecfile"`
+	LeapSecMode      string `yaml:"leapsec_mode" json:"leapsec_mode"`
+	LeapSmearLength  time.Duration `yaml:"leap_smear_length" json:"leap_smear_length"`
 }
 
 // PTPTuningConfig настройки тонкой настройки PTP

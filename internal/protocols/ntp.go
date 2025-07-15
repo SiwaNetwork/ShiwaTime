@@ -76,11 +76,11 @@ func (h *ntpHandler) Start() error {
 	}
 	
 	h.logger.WithFields(logrus.Fields{
-		"server": h.config.IP,
+		"server": h.config.Host,
 	}).Info("Starting NTP handler")
 	
 	// Устанавливаем соединение
-	serverAddr, err := net.ResolveUDPAddr("udp", h.config.IP+":123")
+	serverAddr, err := net.ResolveUDPAddr("udp", fmt.Sprintf("%s:%d", h.config.Host, h.config.Port))
 	if err != nil {
 		return fmt.Errorf("failed to resolve NTP server address: %w", err)
 	}
@@ -194,7 +194,7 @@ func (h *ntpHandler) GetTimeInfo() (*TimeInfo, error) {
 	}
 	
 	h.logger.WithFields(logrus.Fields{
-		"server":    h.config.IP,
+		"server":    h.config.Host,
 		"offset":    offset,
 		"delay":     delay,
 		"stratum":   resp.Stratum,

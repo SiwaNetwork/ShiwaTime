@@ -106,48 +106,46 @@ func validateConfig(config *Config) error {
 
 // validateTimeSource проверяет корректность конфигурации источника времени
 func validateTimeSource(source TimeSourceConfig, context string) error {
-	supportedProtocols := []string{"ptp", "ntp", "pps", "nmea", "phc", "timebeat_opentimecard", "timebeat_opentimecard_mini", "ocp_timecard"}
+	supportedProtocols := []string{"ptp", "ntp", "pps", "nmea", "phc", "timecard", "mock"}
 	
-	// Проверяем протокол
-	if source.Protocol == "" {
-		return fmt.Errorf("%s: protocol is required", context)
+	// Проверяем тип протокола
+	if source.Type == "" {
+		return fmt.Errorf("%s: type is required", context)
 	}
 
 	found := false
 	for _, p := range supportedProtocols {
-		if source.Protocol == p {
+		if source.Type == p {
 			found = true
 			break
 		}
 	}
 	if !found {
-		return fmt.Errorf("%s: unsupported protocol '%s', supported: %s", 
-			context, source.Protocol, strings.Join(supportedProtocols, ", "))
+		return fmt.Errorf("%s: unsupported type '%s', supported: %s", 
+			context, source.Type, strings.Join(supportedProtocols, ", "))
 	}
 
 	// Протокол-специфичная валидация
-	switch source.Protocol {
+	switch source.Type {
 	case "ptp":
 		if source.Domain < 0 || source.Domain > 255 {
 			return fmt.Errorf("%s: PTP domain must be between 0 and 255", context)
 		}
-		if source.DelayStrategy != "" && source.DelayStrategy != "e2e" && source.DelayStrategy != "p2p" {
-			return fmt.Errorf("%s: PTP delay_strategy must be 'e2e' or 'p2p'", context)
+		if source.Interface == "" {
+			return fmt.Errorf("%s: PTP interface is required", context)
 		}
 	case "ntp":
-		if source.IP == "" {
-			return fmt.Errorf("%s: NTP IP address is required", context)
+		if source.Host == "" {
+			return fmt.Errorf("%s: NTP host is required", context)
 		}
-		if source.PollInterval != "" {
-			if _, err := parseDuration(source.PollInterval); err != nil {
-				return fmt.Errorf("%s: invalid NTP poll interval: %w", context, err)
-			}
+		if source.Port <= 0 {
+			source.Port = 123 // Default NTP port
 		}
 	case "nmea":
 		if source.Device == "" {
 			return fmt.Errorf("%s: NMEA device path is required", context)
 		}
-		if source.Baud <= 0 {
+		if source.BaudRate <= 0 {
 			return fmt.Errorf("%s: NMEA baud rate must be positive", context)
 		}
 	}
@@ -220,10 +218,10 @@ func setDefaults(config *Config) {
 
 // setTimeSourceDefaults устанавливает значения по умолчанию для источника времени
 func setTimeSourceDefaults(source *TimeSourceConfig) {
-	switch source.Protocol {
+	switch source.Type {
 	case "ptp":
-		if source.AnnounceInterval == 0 {
-			source.AnnounceInterval = 1
+		if source.LogAnnounceInterval == 0 {
+			source.LogAnnounceInterval = 1
 		}
 		if source.Priority1 == 0 {
 			source.Priority1 = 128
@@ -231,16 +229,16 @@ func setTimeSourceDefaults(source *TimeSourceConfig) {
 		if source.Priority2 == 0 {
 			source.Priority2 = 128
 		}
-		if source.DelayStrategy == "" {
-			source.DelayStrategy = "e2e"
+		if source.Domain == 0 {
+			source.Domain = 0 // Default PTP domain
 		}
 	case "ntp":
-		if source.PollInterval == "" {
-			source.PollInterval = "4s"
+		if source.Port == 0 {
+			source.Port = 123
 		}
 	case "nmea":
-		if source.Baud == 0 {
-			source.Baud = 9600
+		if source.BaudRate == 0 {
+			source.BaudRate = 9600
 		}
 	}
 }
