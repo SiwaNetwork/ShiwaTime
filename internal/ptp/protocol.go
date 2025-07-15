@@ -79,3 +79,67 @@ func (h *Header) UnmarshalBinary(b []byte) error {
     h.LogMessageInterval = int8(b[33])
     return nil
 }
+
+// Timestamp is 48-bit seconds + 32-bit nanoseconds structure.
+type Timestamp struct {
+    Seconds uint64 // only lower 48 bits used
+    Nanoseconds uint32
+}
+
+// MarshalTimestamp writes Timestamp into 10-byte buffer.
+func (t Timestamp) Marshal(buf []byte) {
+    // assume len(buf)>=10
+    buf[0] = byte(t.Seconds >> 40)
+    buf[1] = byte(t.Seconds >> 32)
+    buf[2] = byte(t.Seconds >> 24)
+    buf[3] = byte(t.Seconds >> 16)
+    buf[4] = byte(t.Seconds >> 8)
+    buf[5] = byte(t.Seconds)
+    binary.BigEndian.PutUint32(buf[6:], t.Nanoseconds)
+}
+
+func (t *Timestamp) Unmarshal(buf []byte) {
+    t.Seconds = uint64(buf[0])<<40 | uint64(buf[1])<<32 | uint64(buf[2])<<24 | uint64(buf[3])<<16 | uint64(buf[4])<<8 | uint64(buf[5])
+    t.Nanoseconds = binary.BigEndian.Uint32(buf[6:])
+}
+
+// Announce message specific fields (after common header).
+type AnnounceMessage struct {
+    OriginTimestamp Timestamp
+    CurrentUTCOffset int16
+    GrandmasterPriority1 uint8
+    GrandmasterClockQuality ClockQuality
+    GrandmasterPriority2 uint8
+    GrandmasterIdentity [8]byte
+    StepsRemoved uint16
+    TimeSource uint8
+}
+
+// Signaling message consists of header + targetPortIdentity (10 bytes) + TLVs.
+
+type SignalingMessage struct {
+    Target PortIdentity
+    TLVs []TLV
+}
+
+// Management message:
+type ManagementMessage struct {
+    Target PortIdentity
+    StartingTLV TLV // simplified: one TLV
+}
+
+// TLV generic
+const tlvHeaderSize = 4
+
+type TLV struct {
+    Type  uint16
+    Value []byte
+}
+
+func (t *TLV) Marshal() []byte {
+    buf := make([]byte, tlvHeaderSize+len(t.Value))
+    binary.BigEndian.PutUint16(buf[0:], t.Type)
+    binary.BigEndian.PutUint16(buf[2:], uint16(len(t.Value)))
+    copy(buf[4:], t.Value)
+    return buf
+}
