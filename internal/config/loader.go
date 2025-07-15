@@ -187,6 +187,9 @@ func setDefaults(config *Config) {
 	}
 
 	// Elasticsearch значения по умолчанию
+	if config.Output.Type == "" {
+        config.Output.Type = "native"
+    }
 	if len(config.Output.Elasticsearch.Hosts) == 0 {
 		config.Output.Elasticsearch.Hosts = []string{"localhost:9200"}
 	}

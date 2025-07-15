@@ -94,3 +94,28 @@ shiwatime:
 ## Лицензия
 
 MIT License
+
+## Metrics output configuration
+
+ShiwaTime может публиковать метрики двумя способами:
+
+1. **native** – встроенный клиент bulk HTTP (значение по-умолчанию, совместимо с предыдущими версиями).
+2. **beats** – публикация документов в формате Elastic Beats (подготовка к миграции на Elastic Agent).
+
+Пример секции `output` в конфигурации (`shiwatime.yml`):
+
+```yaml
+output:
+  type: beats               # "native" | "beats" (по-умолчанию native)
+  # Параметры для native-клиента
+  elasticsearch:
+    hosts: ["https://es01:9200"]
+    username: "elastic"
+    password: "changeme"
+
+  # Параметры для beats-клиента (используются, если type == "beats")
+  beats:
+    hosts: ["https://es01:9200"]
+    username: "elastic"
+    password: "changeme"
+```

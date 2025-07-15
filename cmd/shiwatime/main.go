@@ -107,16 +107,14 @@ func runShiwaTime(cmd *cobra.Command, args []string) {
 	logger.WithField("config_path", configPath).Info("Loaded configuration")
 	
 	// Создаем клиент метрик
-	var metricsClient *metrics.Client
-	if len(cfg.Output.Elasticsearch.Hosts) > 0 {
-		metricsClient, err = metrics.NewClient(cfg.Output.Elasticsearch, logger)
-		if err != nil {
-			logger.WithError(err).Error("Failed to create metrics client, continuing without metrics")
-		} else {
-			// Настраиваем шаблоны индексов
-			if err := metricsClient.SetupIndexTemplates(); err != nil {
-				logger.WithError(err).Warn("Failed to setup index templates")
-			}
+	var metricsClient metrics.ClientInterface
+	metricsClientInterface, err := metrics.NewMetricsClient(cfg.Output, logger)
+	if err != nil {
+		logger.WithError(err).Warn("Metrics client disabled: " + err.Error())
+	} else {
+		metricsClient = metricsClientInterface
+		if err := metricsClient.SetupIndexTemplates(); err != nil {
+			logger.WithError(err).Warn("Failed to setup index templates")
 		}
 	}
 	

@@ -74,7 +74,7 @@ type SourceMetrics struct {
 type Manager struct {
 	config        *config.Config
 	logger        *logrus.Logger
-	metricsClient *metrics.Client
+	metricsClient metrics.ClientInterface
 	
 	// Источники времени
 	primarySources   []*TimeSource
@@ -94,7 +94,7 @@ type Manager struct {
 }
 
 // NewManager создает новый менеджер часов
-func NewManager(cfg *config.Config, logger *logrus.Logger, metricsClient *metrics.Client) (*Manager, error) {
+func NewManager(cfg *config.Config, logger *logrus.Logger, metricsClient metrics.ClientInterface) (*Manager, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 	
 	stepLimit, err := parseDuration(cfg.ShiwaTime.ClockSync.StepLimit)
