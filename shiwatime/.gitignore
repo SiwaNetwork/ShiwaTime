@@ -1,0 +1,62 @@
+# Binaries for programs and plugins
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Test binary, built with `go test -c`
+*.test
+
+# Output of the go coverage tool, specifically when used with LiteIDE
+*.out
+
+# Dependency directories (remove the comment below to include it)
+# vendor/
+
+# Go workspace file
+go.work
+
+# Build directory
+build/
+dist/
+
+# IDE specific files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS specific files
+.DS_Store
+Thumbs.db
+
+# ShiwaTime specific
+shiwatime
+shiwatime-dev
+shiwatime.service
+*.log
+*.pid
+
+# Configuration files with sensitive data
+/etc/shiwatime/shiwatime.yml
+/etc/shiwatime/peerids.json
+/etc/shiwatime/shiwatime.lic
+
+# Temporary files
+*.tmp
+*.bak
+*.backup
+
+# Test data
+testdata/
+
+# Coverage files
+coverage.txt
+coverage.html
+*.cover
+
+# Profiling files
+*.prof
+*.pprof

@@ -1,0 +1,188 @@
+#              ____ _     _               _____ _                
+#             / ___| |__ (_)_      ____ _|_   _(_)_ __ ___   ___ 
+#             \___ \ '_ \| \ \ /\ / / _` | | | | | '_ ` _ \ / _ \
+#              ___) | | | | |\ V  V / (_| | | | | | | | | | |  __/
+#             |____/|_| |_|_| \_/\_/ \__,_| |_| |_|_| |_| |_|\___|
+
+################### ShiwaTime Configuration #########################
+
+shiwatime:
+
+  # Location of license key file for premium features
+  license:
+    keyfile: '/etc/shiwatime/shiwatime.lic'
+
+  # Location of peer identities config file
+  config:
+    peerids: '/etc/shiwatime/peerids.json'
+
+  # Configuration for clock synchronisation
+  clock_sync:
+
+    # Enable clock synchronisation (set to false for monitoring only)
+    adjust_clock: true
+
+    # Step limit restrictions
+    step_limit: 15m
+
+    # Primary clock sources
+    primary_clocks:
+
+      # NTP example - simple configuration
+      - protocol: ntp
+        ip: 'pool.ntp.org'
+        pollinterval: 4s
+        disable: false
+
+      # PTP example - commented out by default
+      #- protocol: ptp
+      #  domain: 0
+      #  interface: eth0
+      #  announce_interval: 1
+      #  sync_interval: 0
+      #  delayrequest_interval: 0
+      #  delay_strategy: e2e
+      #  priority1: 128
+      #  priority2: 128
+      #  disable: false
+
+    # Secondary clocks - activate when primary sources are unavailable
+    secondary_clocks:
+
+      # Backup NTP servers
+      - protocol: ntp
+        ip: 'time.google.com'
+        pollinterval: 4s
+
+      - protocol: ntp
+        ip: 'time.cloudflare.com'
+        pollinterval: 4s
+
+    # PTPSquared configuration (disabled by default)
+    ptpsquared:
+      enable: false
+
+    # Time as a Service configuration (disabled by default)
+    taas:
+      enable: false
+
+  # Advanced configuration
+  advanced:
+    
+    # Steering algorithm configuration
+    steering:
+      algo: sigma  # Options: alpha, beta, gamma, rho, sigma
+      algo_logging: false
+      outlier_filter_enabled: true
+      outlier_filter_type: strict  # Options: strict, moderate, relaxed
+      servo_offset_arrival_driven: true
+
+    # Interference monitoring
+    interference_monitor:
+      backoff_timer: 5m
+
+    # Extended step limits
+    extended_step_limits:
+      forward:
+        boundary: 500ms
+        limit: 15m
+      backward:
+        boundary: 500ms
+        limit: 15m
+
+    # Windows specific settings
+    windows_specific:
+      disable_os_relax: false
+
+    # Linux specific settings
+    linux_specific:
+      hardware_timestamping: true
+      external_software_timestamping: false
+      sync_nic_slaves: false
+      tai_offset: auto
+
+    # PTP protocol tuning
+    ptp_tuning:
+      relax_delay_requests: true
+      auto_discover_enabled: false
+      multicast_ttl: 1
+      ptp_standard: "1588-2008"
+      clock_quality:
+        auto: true
+        class: 248
+        accuracy: "0x23"
+        variance: "0xFFFF"
+        timesource: "0xA0"
+
+    # RTC synchronization
+    synchronise_rtc:
+      enable: true
+      clock_interval: 11m
+
+    # CLI interface (SSH based)
+    cli:
+      enable: false
+      bind_port: 65129
+      bind_host: 127.0.0.1
+      username: "admin"
+      password: "password"
+
+    # HTTP status interface
+    http:
+      enable: true
+      bind_port: 8088
+      bind_host: 127.0.0.1
+
+    # Internal logging configuration
+    logging:
+      stdout.enable: true
+      buffer_size: 10000
+
+# ================================== Outputs ===================================
+
+# Elasticsearch output configuration
+output:
+  elasticsearch:
+    hosts: ['localhost:9200']
+    protocol: 'http'
+    #api_key: 'id:api_key'
+    #username: 'elastic'
+    #password: 'changeme'
+
+# ================================== Setup =====================================
+
+# Dashboard setup
+setup:
+  dashboards:
+    enabled: false
+    #url:
+    #directory: ${path.home}/kibana
+
+  # Index Lifecycle Management
+  ilm:
+    enabled: true
+    policy_name: "shiwatime"
+    check_exists: true
+    rollover_alias: "shiwatime"
+
+# ================================== Logging ===================================
+
+# Logging configuration
+logging:
+  level: info
+  to_files: true
+  files:
+    path: /var/log/shiwatime
+    name: shiwatime
+    rotateeverybytes: 10485760  # 10MB
+    keepfiles: 7
+    permissions: "0600"
+
+# ================================= Monitoring =================================
+
+# Monitoring configuration
+monitoring:
+  enabled: true
+  #cluster_uuid:
+  elasticsearch:
+    # Inherits from output.elasticsearch if not specified
