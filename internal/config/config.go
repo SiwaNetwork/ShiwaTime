@@ -33,6 +33,7 @@ type Source struct {
     PollInterval Duration `yaml:"pollinterval"`
     MonitorOnly  bool     `yaml:"monitor_only"`
     Disable      bool     `yaml:"disable"`
+    Device       string   `yaml:"device"`
 }
 
 // Output alias removed; use OutputElastic directly

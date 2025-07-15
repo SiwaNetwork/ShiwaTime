@@ -13,6 +13,7 @@ import (
     "shiwa/internal/metrics"
     "shiwa/internal/source"
     "shiwa/internal/source/ntp"
+    "shiwa/internal/source/phc"
 )
 
 func main() {
@@ -51,6 +52,8 @@ func main() {
         }
         if s.Protocol == "ntp" {
             sources = append(sources, ntp.New(s.IP, s.PollInterval.Duration, s.MonitorOnly))
+        } else if s.Protocol == "phc" {
+            sources = append(sources, phc.New(s.Device, s.MonitorOnly))
         }
         // TODO: ptp, pps, etc.
     }
