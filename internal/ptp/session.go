@@ -27,6 +27,8 @@ type Session struct {
 
     state int
 
+    forceMaster bool
+
     connEvent *net.UDPConn // port 319 event
     connGen   *net.UDPConn // port 320 general
 
@@ -40,7 +42,13 @@ type Session struct {
 }
 
 func NewSession(iface string, domain uint8) *Session {
-    return &Session{iface: iface, domain: domain, state: StateInit}
+    return &Session{
+        iface: iface,
+        domain: domain,
+        state: StateInit,
+        logAnnounce: defaultLogAnnounce,
+        logSync: defaultLogSync,
+    }
 }
 
 func (s *Session) Start(ctx context.Context) (<-chan source.OffsetMeasurement, error) {
@@ -74,9 +82,32 @@ func (s *Session) Start(ctx context.Context) (<-chan source.OffsetMeasurement, e
     s.connGen = connGen
     s.seq = uint16(rand.Uint32())
 
+    // if no current master information we might start as grandmaster (forceMaster)
+    if s.forceMaster {
+        s.becomeMaster()
+    }
+
     out := make(chan source.OffsetMeasurement)
     go s.run(ctx, out)
     return out, nil
+}
+
+func (s *Session) becomeMaster() {
+    if s.state == StateMaster {
+        return
+    }
+    s.state = StateMaster
+    // start timers
+    if s.announceTimer == nil {
+        s.announceTimer = time.NewTimer(logToDur(defaultLogAnnounce))
+    } else {
+        s.announceTimer.Reset(logToDur(defaultLogAnnounce))
+    }
+    if s.syncTimer == nil {
+        s.syncTimer = time.NewTimer(logToDur(defaultLogSync))
+    } else {
+        s.syncTimer.Reset(logToDur(defaultLogSync))
+    }
 }
 
 func joinIPv4Multicast(fd int, maddr net.IP, ifindex int) {
