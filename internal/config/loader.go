@@ -177,6 +177,9 @@ func setDefaults(config *Config) {
 	if config.ShiwaTime.CLI.Enable && config.ShiwaTime.CLI.Username == "" {
 		config.ShiwaTime.CLI.Username = "admin"
 	}
+	if config.ShiwaTime.CLI.Enable && config.ShiwaTime.CLI.MaxSessions == 0 {
+        config.ShiwaTime.CLI.MaxSessions = 5
+    }
 
 	// HTTP значения по умолчанию
 	if config.ShiwaTime.HTTP.Enable && config.ShiwaTime.HTTP.BindPort == 0 {

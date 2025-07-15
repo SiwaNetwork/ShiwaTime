@@ -1,12 +1,18 @@
 package server
 
 import (
+	"bufio"
 	"fmt"
 	"io"
+	"os"
+	"strings"
+	"sync"
 	"time"
 	
-	"github.com/gliderlabs/ssh"
+	ssh "github.com/gliderlabs/ssh"
 	"github.com/sirupsen/logrus"
+	
+	cryptossh "golang.org/x/crypto/ssh"
 	
 	"github.com/shiwatime/shiwatime/internal/clock"
 	"github.com/shiwatime/shiwatime/internal/config"
@@ -18,6 +24,10 @@ type CLIServer struct {
 	clockManager *clock.Manager
 	logger       *logrus.Logger
 	server       *ssh.Server
+
+	mu             sync.Mutex
+	activeSessions int
+	authorizedKeys map[string]cryptossh.PublicKey
 }
 
 // NewCLIServer создает новый CLI сервер
@@ -26,15 +36,24 @@ func NewCLIServer(cfg config.CLIConfig, clockManager *clock.Manager, logger *log
 		config:       cfg,
 		clockManager: clockManager,
 		logger:       logger,
+		authorizedKeys: map[string]cryptossh.PublicKey{},
 	}
 }
 
 // Start запускает CLI сервер
 func (s *CLIServer) Start() error {
+	// Загружаем authorized_keys, если указан путь
+	if s.config.AuthorizedKeys != "" {
+		if err := s.loadAuthorizedKeys(s.config.AuthorizedKeys); err != nil {
+			s.logger.WithError(err).Warn("Failed to load authorized_keys file")
+		}
+	}
+
 	s.server = &ssh.Server{
 		Addr: fmt.Sprintf("%s:%d", s.config.BindHost, s.config.BindPort),
 		Handler: s.handleSession,
 		PasswordHandler: s.handlePassword,
+		PublicKeyHandler: s.handlePublicKey,
 	}
 	
 	s.logger.WithField("addr", s.server.Addr).Info("Starting CLI server")
@@ -55,14 +74,48 @@ func (s *CLIServer) Stop() error {
 
 // handlePassword обрабатывает аутентификацию
 func (s *CLIServer) handlePassword(ctx ssh.Context, password string) bool {
-	// Простая аутентификация по паролю
-	return ctx.User() == s.config.Username && password == s.config.Password
+	if ctx.User() != s.config.Username || password != s.config.Password {
+		return false
+	}
+	// Проверка лимита сессий
+	return s.incrementSession()
+}
+
+// handlePublicKey проверяет ключ в authorized_keys и лимит сессий
+func (s *CLIServer) handlePublicKey(ctx ssh.Context, key ssh.PublicKey) bool {
+	fingerprint := cryptossh.FingerprintSHA256(key)
+	if _, ok := s.authorizedKeys[fingerprint]; !ok {
+		return false
+	}
+	return s.incrementSession()
+}
+
+// incrementSession увеличивает счетчик и проверяет лимит
+func (s *CLIServer) incrementSession() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.config.MaxSessions > 0 && s.activeSessions >= s.config.MaxSessions {
+		return false
+	}
+	s.activeSessions++
+	return true
+}
+
+func (s *CLIServer) decrementSession() {
+	s.mu.Lock()
+	if s.activeSessions > 0 {
+		s.activeSessions--
+	}
+	s.mu.Unlock()
 }
 
 // handleSession обрабатывает SSH сессию
 func (s *CLIServer) handleSession(sess ssh.Session) {
 	user := sess.User()
 	s.logger.WithField("user", user).Info("CLI session started")
+
+	// Ensure counter is decremented on exit
+	defer s.decrementSession()
 	
 	// Приветствие
 	io.WriteString(sess, fmt.Sprintf("Welcome to ShiwaTime CLI\n"))
@@ -98,6 +151,8 @@ func (s *CLIServer) handleSession(sess ssh.Session) {
 // handleCommand обрабатывает команды CLI
 func (s *CLIServer) handleCommand(sess ssh.Session, command string) {
 	switch command {
+	case "sessions":
+		s.handleSessionsCommand(sess)
 	case "status":
 		s.handleStatusCommand(sess)
 	case "sources":
@@ -172,9 +227,20 @@ func (s *CLIServer) handleSourcesCommand(sess ssh.Session) {
 	io.WriteString(sess, "\n")
 }
 
+// handleSessionsCommand выводит количество активных сессий и лимит
+func (s *CLIServer) handleSessionsCommand(sess ssh.Session) {
+	s.mu.Lock()
+	current := s.activeSessions
+	max := s.config.MaxSessions
+	s.mu.Unlock()
+
+	io.WriteString(sess, fmt.Sprintf("Active sessions: %d / %d\n\n", current, max))
+}
+
 // handleHelpCommand обрабатывает команду help
 func (s *CLIServer) handleHelpCommand(sess ssh.Session) {
 	help := `Available commands:
+  sessions - Show active SSH session count
   status   - Show clock synchronization status
   sources  - Show time sources information
   help     - Show this help message
@@ -182,4 +248,29 @@ func (s *CLIServer) handleHelpCommand(sess ssh.Session) {
 
 `
 	io.WriteString(sess, help)
+}
+
+// loadAuthorizedKeys читает файл authorized_keys и заполняет карту отпечатков
+func (s *CLIServer) loadAuthorizedKeys(path string) error {
+	f, err := os.Open(path)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	scanner := bufio.NewScanner(f)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		pubKey, _, _, _, err := cryptossh.ParseAuthorizedKey([]byte(line))
+		if err != nil {
+			s.logger.WithError(err).Warn("Skipping invalid public key entry")
+			continue
+		}
+		fp := cryptossh.FingerprintSHA256(pubKey)
+		s.authorizedKeys[fp] = pubKey
+	}
+	return scanner.Err()
 }

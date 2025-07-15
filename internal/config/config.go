@@ -148,6 +148,8 @@ type CLIConfig struct {
 	AuthorizedKeys string `yaml:"authorised_keys,omitempty"`
 	Username       string `yaml:"username,omitempty"`
 	Password       string `yaml:"password,omitempty"`
+
+	MaxSessions    int    `yaml:"max_sessions,omitempty"`
 }
 
 // HTTPConfig настройки HTTP интерфейса
