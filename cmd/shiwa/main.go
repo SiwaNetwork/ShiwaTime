@@ -35,12 +35,21 @@ func main() {
         cancel()
     }()
 
-    // Metrics client
-    var metricsClient *metrics.Client
-    if len(cfg.OutputElastic.Hosts) > 0 {
-        metricsClient, err = metrics.New(cfg.OutputElastic.Hosts, "shiwa-timebeat")
-        if err != nil {
-            log.Printf("metrics disabled: %v", err)
+    var publisher interface {
+        PublishAsync(context.Context, metrics.Event)
+    }
+
+    // Prefer libbeat if available
+    beatPub, err := metrics.NewBeatPublisher("shiwa-timebeat")
+    if err == nil {
+        publisher = beatPub
+    } else if len(cfg.OutputElastic.Hosts) > 0 {
+        // fallback simple ES client
+        esClient, err2 := metrics.New(cfg.OutputElastic.Hosts, "shiwa-timebeat")
+        if err2 == nil {
+            publisher = esClient
+        } else {
+            log.Printf("metrics disabled: %v / %v", err, err2)
         }
     }
 
@@ -93,7 +102,7 @@ func main() {
             if err := clock.ApplyOffset(m.Offset, stepLimit); err != nil {
                 log.Printf("clock adjust error: %v", err)
             }
-            if metricsClient != nil {
+            if publisher != nil {
                 evt := metrics.Event{
                     Timestamp: time.Now(),
                     Fields: map[string]interface{}{
@@ -102,7 +111,7 @@ func main() {
                         "delay":    m.Delay.Seconds(),
                     },
                 }
-                metricsClient.PublishAsync(ctx, evt)
+                publisher.PublishAsync(ctx, evt)
             }
         }
     }
