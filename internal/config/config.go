@@ -34,6 +34,7 @@ type Source struct {
     MonitorOnly  bool     `yaml:"monitor_only"`
     Disable      bool     `yaml:"disable"`
     Device       string   `yaml:"device"`
+    Interface    string   `yaml:"interface"`
 }
 
 // Output alias removed; use OutputElastic directly

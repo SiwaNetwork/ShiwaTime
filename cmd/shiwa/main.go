@@ -14,6 +14,7 @@ import (
     "shiwa/internal/source"
     "shiwa/internal/source/ntp"
     "shiwa/internal/source/phc"
+    "shiwa/internal/source/ptp"
 )
 
 func main() {
@@ -63,6 +64,12 @@ func main() {
             sources = append(sources, ntp.New(s.IP, s.PollInterval.Duration, s.MonitorOnly))
         } else if s.Protocol == "phc" {
             sources = append(sources, phc.New(s.Device, s.MonitorOnly))
+        } else if s.Protocol == "ptp" {
+            iface := s.Interface
+            if iface == "" {
+                iface = "eth0"
+            }
+            sources = append(sources, ptp.New(iface, uint8(s.Domain)))
         }
         // TODO: ptp, pps, etc.
     }
