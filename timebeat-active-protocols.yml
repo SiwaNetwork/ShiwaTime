@@ -1,0 +1,144 @@
+#              ______ _                   __                  __
+#             /_  __/(_)____ ___   ___   / /_   ___   ____ _ / /_
+#              / /  / // __ `__ \ / _ \ / __ \ / _ \ / __ `// __/
+#             / /  / // / / / / //  __// /_/ //  __// /_/ // /_
+#            /_/  /_//_/ /_/ /_/ \___//_.___/ \___/ \__,_/ \__/
+
+################### Timebeat Configuration - All Protocols Active #########################
+
+timebeat:
+
+  # Location of license key file for premium features
+  license.keyfile: '/etc/timebeat/timebeat.lic'
+
+  # Location of peer identities config file
+  config.peerids: '/etc/timebeat/peerids.json'
+
+  # Configuration for clock synchronisation
+  clock_sync:
+
+    # Enable clock synchronisation
+    adjust_clock: true
+
+    # Step limit restrictions
+    step_limit: 15m
+
+    primary_clocks:
+
+      # PTP Configuration - Domain 0
+      - protocol:                 ptp
+        domain:                   0
+        serve_unicast:           true
+        max_unicast_subscribers: 10
+        serve_multicast:         true
+        server_only:             false
+        announce_interval:        1
+        sync_interval:            0
+        delayrequest_interval:    0
+        disable:                  false  # АКТИВИРОВАН
+        delay_strategy:          e2e
+        priority1:               128
+        priority2:               128
+        monitor_only:            false
+        interface:               eth0
+        profile:                 'G.8275.2'
+        group:                   ptp_primary
+        logsource:               'Primary PTP Clock'
+
+      # NTP Configuration
+      - protocol:      ntp
+        ip:            'pool.ntp.org'
+        pollinterval:  4s
+        monitor_only:  false
+        serve_unicast: true
+        interface:     eth0
+        group:         ntp_primary
+
+      # PPS Configuration - АКТИВИРОВАН
+      - protocol:          pps
+        interface:         eth0
+        pin:               0
+        index:             0
+        cable_delay:       0
+        edge_mode:         "rising"
+        monitor_only:      false
+        atomic:            false
+        linked_device:     '/dev/ttyS0'
+        group:             pps_primary
+        logsource:         'PPS Primary Source'
+
+    secondary_clocks:
+
+      # NMEA-GNSS Configuration - АКТИВИРОВАН
+      - protocol:     nmea
+        device:       '/dev/ttyS0'
+        baud:         9600
+        offset:       0
+        monitor_only: false
+        group:        nmea_secondary
+        logsource:    'NMEA GNSS Secondary'
+
+      # PHC Configuration - АКТИВИРОВАН
+      - protocol:     phc
+        device:       '/dev/ptp0'
+        offset:       0
+        monitor_only: false
+        group:        phc_secondary
+        logsource:    'PHC Hardware Clock'
+
+      # Backup NTP
+      - protocol:      ntp
+        ip:            'time.cloudflare.com'
+        pollinterval:  8s
+        monitor_only:  false
+        group:         ntp_backup
+
+  # PHC synchronization settings
+  sync_phc: true
+  phc_offset_strategy: ["eth0:pps"]
+  phc_local_pref: ["eth0:128"]
+  phc_smoothing_strategy: ["eth0:median"]
+  phc_lp_filter_enabled: true
+  phc_ng_filter_enabled: true
+  phc_samples: ["eth0:15"]
+  phc_one_step: ["eth0"]
+  phc_offsets: ["all:tai"]
+
+# ============================== Outputs =====================================
+
+# Configure Elasticsearch output
+output.elasticsearch:
+  hosts: ["localhost:9200"]
+  index: "timebeat-%{+yyyy.MM.dd}"
+  template.name: "timebeat"
+  template.pattern: "timebeat-*"
+
+# ================================= Processors ================================
+
+processors:
+  - add_host_metadata:
+      when.not.contains.tags: forwarded
+  - add_cloud_metadata: ~
+  - add_docker_metadata: ~
+  - add_kubernetes_metadata: ~
+
+# ================================== Logging ===================================
+
+logging.level: info
+logging.to_files: true
+logging.files:
+  path: /var/log/timebeat
+  name: timebeat
+  rotateeverybytes: 10485760
+  keepfiles: 7
+  permissions: 0600
+
+# ============================== Process Security ==============================
+
+seccomp.enabled: false
+
+# ============================= X-Pack Monitoring ==============================
+
+monitoring.enabled: true
+monitoring.elasticsearch:
+  hosts: ["localhost:9200"]
