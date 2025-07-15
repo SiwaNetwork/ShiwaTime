@@ -178,7 +178,22 @@ type SyslogConfig struct {
 
 // OutputConfig конфигурация выходных данных (Elasticsearch)
 type OutputConfig struct {
-	Elasticsearch ElasticsearchConfig `yaml:"elasticsearch"`
+	// Type определяет тип клиента метрик. Возможные значения: "native" (bulk HTTP), "beats" (Elastic Beats)
+	Type string `yaml:"type,omitempty"`
+
+	Elasticsearch ElasticsearchConfig `yaml:"elasticsearch,omitempty"`
+
+	// Параметры для beats-клиента (используются, если Type == "beats")
+	Beats BeatsConfig `yaml:"beats,omitempty"`
+}
+
+// BeatsConfig настройки для интеграции через Elastic Beats publisher
+type BeatsConfig struct {
+	Hosts    []string `yaml:"hosts"`        // список адресов output (Logstash или Elasticsearch)
+	Username string   `yaml:"username,omitempty"`
+	Password string   `yaml:"password,omitempty"`
+	APIKey   string   `yaml:"api_key,omitempty"`
+	Protocol string   `yaml:"protocol,omitempty"` // http / https
 }
 
 // ElasticsearchConfig настройки Elasticsearch
