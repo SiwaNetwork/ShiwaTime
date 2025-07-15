@@ -1,0 +1,15 @@
+shiwatime:
+  clock_sync:
+    adjust_clock: true
+    primary_clocks:
+      - protocol: ntp
+        ip: '0.pool.ntp.org'
+        pollinterval: 4s
+    secondary_clocks:
+      - protocol: ntp
+        ip: '1.pool.ntp.org'
+        pollinterval: 4s
+
+output:
+  elasticsearch:
+    hosts: ['localhost:9200']
