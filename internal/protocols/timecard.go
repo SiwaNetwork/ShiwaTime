@@ -10,6 +10,7 @@ import (
 
 	"github.com/sirupsen/logrus"
 	"github.com/shiwatime/shiwatime/internal/config"
+    tcdrv "github.com/shiwatime/shiwatime/internal/timecard"
 )
 
 // timecardHandler реализация Timecard обработчика
@@ -29,6 +30,7 @@ type timecardHandler struct {
 	wg       sync.WaitGroup
 	ctx       context.Context
 	cancel    context.CancelFunc
+	drv       tcdrv.Driver
 }
 
 // NewTimecardHandler создает новый Timecard обработчик
@@ -59,9 +61,18 @@ func (h *timecardHandler) Start() error {
 	h.status.Connected = true
 	h.status.LastActivity = time.Now()
 
-	// Запускаем фоновое чтение регистров/статуса
-	h.wg.Add(1)
-	go h.monitorLoop()
+	// Try to open PCI driver if pci_addr provided
+	if h.config.Options != nil {
+		if addr, ok := h.config.Options["pci_addr"]; ok && addr != "" {
+			d, err := tcdrv.OpenPCI(addr)
+			if err != nil {
+				h.logger.WithError(err).Warn("time-card: failed to open PCI device, will use status file")
+			} else {
+				h.drv = d
+				h.logger.WithField("pci_addr", addr).Info("time-card: PCI BAR0 mapped")
+			}
+		}
+	}
  
  	// TODO: Реализовать работу с timecard устройствами
  
@@ -84,6 +95,10 @@ func (h *timecardHandler) Stop() error {
 	h.status.Connected = false
 	h.wg.Wait()
  
+ 	if h.drv != nil {
+ 		h.drv.Close()
+ 		h.drv = nil
+ 	}
  	return nil
 }
 
@@ -142,7 +157,17 @@ func (h *timecardHandler) monitorLoop() {
 		case <-h.ctx.Done():
 			return
 		case <-ticker.C:
-			ppsTime, ppsCnt, gnssFix, err := h.readStatus(statusPath)
+			var (
+				ppsTime time.Time
+				ppsCnt uint64
+				gnssFix bool
+				err error
+			)
+			if h.drv != nil {
+				ppsTime, ppsCnt, gnssFix, err = h.readRegisters()
+			} else {
+				ppsTime, ppsCnt, gnssFix, err = h.readStatus(statusPath)
+			}
 			if err != nil {
 				h.logger.WithError(err).Debug("time-card: status read failed, switching to simulated mode")
 				// fabricate PPS each second to keep pipeline alive
@@ -185,4 +210,29 @@ func (h *timecardHandler) readStatus(path string) (time.Time, uint64, bool, erro
 	}
 	ts := time.Unix(0, lastNs)
 	return ts, ppsCnt, gnssFix, nil
+}
+
+// readRegisters reads GNSS/PPS info via pciDriver
+func (h *timecardHandler) readRegisters() (time.Time, uint64, bool, error) {
+	if h.drv == nil {
+		return time.Time{}, 0, false, fmt.Errorf("no driver")
+	}
+	// Read PPS counter 64-bit
+	lo := uint64(h.drv.ReadU32(tcRegPpsCountL))
+	hi := uint64(h.drv.ReadU32(tcRegPpsCountH))
+	ppsCnt := (hi << 32) | lo
+	lastNs := int64(h.drv.ReadU32(tcRegPpsLastNs))
+	// GNSS fix / sats
+	fixReg := h.drv.ReadU32(tcRegGnssFix)
+	gnssValid := (fixReg & 0x1) == 1
+	// Build timestamp from ToD
+	secLo := uint64(h.drv.ReadU32(tcRegTodSecL))
+	secHi := uint64(h.drv.ReadU32(tcRegTodSecH) & 0xFFFF)
+	utcSec := (secHi << 32) | secLo
+	ns := uint64(h.drv.ReadU32(tcRegTodNs))
+	ppsTime := time.Unix(int64(utcSec), int64(ns))
+	if lastNs != 0 {
+		ppsTime = time.Unix(int64(utcSec), lastNs)
+	}
+	return ppsTime, ppsCnt, gnssValid, nil
 }
