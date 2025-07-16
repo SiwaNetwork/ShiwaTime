@@ -226,3 +226,58 @@ func CreateHandler(protocol string, config config.TimeSourceConfig, logger *logr
 		return NewMockHandler(config, logger)
 	}
 }
+
+// PTPSquaredHandler интерфейс для PTP+Squared обработчика
+type PTPSquaredHandler interface {
+	TimeSourceHandler
+	
+	// GetPeerID получает ID пира
+	GetPeerID() string
+	
+	// GetDomains получает поддерживаемые домены
+	GetDomains() []int
+	
+	// GetSeatsToOffer получает количество предлагаемых слотов
+	GetSeatsToOffer() int
+	
+	// GetSeatsToFill получает количество заполняемых слотов
+	GetSeatsToFill() int
+	
+	// GetConcurrentSources получает количество одновременных источников
+	GetConcurrentSources() int
+	
+	// GetCapabilities получает возможности узла
+	GetCapabilities() []string
+	
+	// GetPreferenceScore получает предпочтительный балл
+	GetPreferenceScore() int
+	
+	// GetReservations получает резервирования
+	GetReservations() []string
+	
+	// GetConnectedPeers получает список подключенных пиров
+	GetConnectedPeers() []string
+	
+	// GetNetworkStats получает статистику сети
+	GetNetworkStats() *PTPSquaredNetworkStats
+	
+	// RequestSeat запрашивает слот у другого узла
+	RequestSeat(peerID string, domain int) error
+	
+	// OfferSeat предлагает слот другому узлу
+	OfferSeat(peerID string, domain int) error
+	
+	// HandleTimeSync обрабатывает синхронизацию времени
+	HandleTimeSync(peerID string, timeInfo *TimeInfo) error
+}
+
+// PTPSquaredNetworkStats статистика PTP+Squared сети
+type PTPSquaredNetworkStats struct {
+	TotalPeers       int
+	ActivePeers      int
+	TotalSeatsOffered int
+	TotalSeatsFilled  int
+	AverageLatency    time.Duration
+	AverageJitter     time.Duration
+	NetworkQuality    float64
+}

@@ -77,6 +77,9 @@ func (w *ShmWriter) Close() {
         return
     }
     addr := uintptr(unsafe.Pointer(w.data))
-    _ = unix.Shmdt(addr)
+    _, _, errno := syscall.Syscall(syscall.SYS_SHMDT, addr, 0, 0)
+    if errno != 0 {
+        // Ignore error on close
+    }
     // do not remove segment, let chrony reuse across restarts
 }
