@@ -33,6 +33,8 @@ type timecardHandler struct {
 	ctx       context.Context
 	cancel    context.CancelFunc
 	drv       tcdrv.Driver
+	shm        *tcdrv.ShmWriter // shared memory interface
+ // (but we used unexported). We'll export type.
 }
 
 // NewTimecardHandler создает новый Timecard обработчик
@@ -78,6 +80,20 @@ func (h *timecardHandler) Start() error {
  
  	// TODO: Реализовать работу с timecard устройствами
  
+ 	// setup SHM if configured
+	if h.config.Options != nil {
+		if segStr, ok := h.config.Options["shm_segment"]; ok && segStr != "" {
+			var seg int
+			fmt.Sscanf(segStr, "%d", &seg)
+			if sw, err := tcdrv.OpenShm(seg); err == nil {
+				h.shm = sw
+				h.logger.WithField("shm_segment", seg).Info("time-card: SHM segment opened")
+			} else {
+				h.logger.WithError(err).Warn("time-card: cannot open SHM segment")
+			}
+		}
+	}
+ 
  	return nil
 }
 
@@ -101,6 +117,10 @@ func (h *timecardHandler) Stop() error {
  		h.drv.Close()
  		h.drv = nil
  	}
+ 	if h.shm != nil {
+		h.shm.Close()
+		h.shm = nil
+	}
  	return nil
 }
 
@@ -196,6 +216,9 @@ func (h *timecardHandler) monitorLoop() {
 			h.lastOffset = time.Since(ppsTime)
 			h.status.LastActivity = time.Now()
 			h.mu.Unlock()
+			if h.shm != nil {
+				h.shm.Write(ppsTime)
+			}
 		}
 	}
 }
