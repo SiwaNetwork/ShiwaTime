@@ -165,13 +165,13 @@ timebeat:
       #  if you need help...)
 
       # Open Timecard Mini
-      #- protocol:     timebeat_opentimecard_mini   # Timebeat Timecard Mini
-      #  device:       '/dev/ttyS4'             # Serial device path
-      #  baud:         9600                     # Serial device baud rate
-      #  card_config:  ['gnss:signal:gps+glonass+galileo']
-      #  offset:       0                        # Static offset of RMC line
-      #  atomic:       false                    # Indicate if oscillator is atomic
-      #  monitor_only: false
+      - protocol:     timebeat_opentimecard_mini   # Timebeat Timecard Mini
+        device:       '/dev/ttyS4'             # Serial device path
+        baud:         9600                     # Serial device baud rate
+        card_config:  ['gnss1:signal:gps+glonass+galileo']
+        offset:       0                        # Static offset of RMC line
+        atomic:       false                    # Indicate if oscillator is atomic
+        monitor_only: false
 
       # OCP Timecard
       #- protocol:          ocp_timecard        # OCP Timecard
