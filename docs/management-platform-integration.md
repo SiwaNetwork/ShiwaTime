@@ -88,9 +88,6 @@ sudo ./setup_management_integration.sh
 
 ```yaml
 timebeat:
-  license:
-    keyfile: '/etc/timebeat/timebeat.lic'
-  
   clock_sync:
     adjust_clock: true
     step_limit: 15m

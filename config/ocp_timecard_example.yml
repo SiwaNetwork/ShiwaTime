@@ -2,9 +2,6 @@
 # OCP Time Appliance Project Time Card
 
 timebeat:
-  license:
-    keyfile: '/etc/timebeat/timebeat.lic'
-  
   config:
     peerids: '/etc/timebeat/peerids.json'
   

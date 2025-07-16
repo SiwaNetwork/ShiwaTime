@@ -67,9 +67,6 @@ setup_management_config() {
     cat > /etc/timebeat/timebeat-cloud.yml << 'EOF'
 # Конфигурация для интеграции с management-platform
 timebeat:
-  license:
-    keyfile: '/etc/timebeat/timebeat.lic'
-  
   clock_sync:
     adjust_clock: true
     step_limit: 15m
@@ -256,25 +253,7 @@ setup_firewall() {
     fi
 }
 
-# Создание тестового лицензионного файла
-create_test_license() {
-    log_info "Создание тестовой лицензии..."
-    
-    cat > /etc/timebeat/timebeat.lic << 'EOF'
-# Тестовая лицензия для development
-# В продакшене замените на реальную лицензию от timebeat.app
 
-LICENSE_TYPE=development
-CUSTOMER_ID=test-customer
-EXPIRY_DATE=2025-12-31
-FEATURES=ptp,ntp,pps,phc,cloud
-EOF
-
-    chown timebeat:timebeat /etc/timebeat/timebeat.lic
-    chmod 600 /etc/timebeat/timebeat.lic
-    
-    log_success "Тестовая лицензия создана"
-}
 
 # Настройка логирования
 setup_logging() {
@@ -363,9 +342,6 @@ main() {
     setup_firewall
     echo
     
-    create_test_license
-    echo
-    
     setup_logging
     echo
     
@@ -378,10 +354,9 @@ main() {
     echo
     echo "Следующие шаги:"
     echo "1. Отредактируйте /etc/timebeat/timebeat-cloud.yml"
-    echo "2. Замените тестовую лицензию на реальную"
-    echo "3. Настройте SSL сертификаты для продакшена"
-    echo "4. Запустите сервис: systemctl enable --now timebeat-cloud.service"
-    echo "5. Проверьте работу: /usr/local/bin/test-timebeat-cloud.sh"
+    echo "2. Настройте SSL сертификаты для продакшена"
+    echo "3. Запустите сервис: systemctl enable --now timebeat-cloud.service"
+    echo "4. Проверьте работу: /usr/local/bin/test-timebeat-cloud.sh"
     echo
 }
 

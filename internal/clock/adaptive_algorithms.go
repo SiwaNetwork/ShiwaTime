@@ -1,7 +1,6 @@
 package clock
 
 import (
-	"context"
 	"fmt"
 	"math"
 	"math/rand"
@@ -10,7 +9,6 @@ import (
 
 	"github.com/sirupsen/logrus"
 	"gonum.org/v1/gonum/mat"
-	"gonum.org/v1/gonum/optimize"
 )
 
 // AdaptiveController представляет адаптивный контроллер с машинным обучением
@@ -240,7 +238,7 @@ func (nn *NeuralNetwork) Update(input *AdaptiveInput, output *AdaptiveOutput) {
 	
 	// Calculate error
 	expected := output.FrequencyAdjustment
-	actual := input.FrequencyAdjustment
+	actual := input.Frequency
 	error := expected - actual
 	
 	// Update weights (simplified)
@@ -423,13 +421,13 @@ func (kf *KalmanFilter) update(input *AdaptiveInput) {
 	kf.state.Add(kf.state, &correction)
 	
 	// Update covariance
-	var I mat.Dense
-	I.Eye(3)
+	I := mat.NewDense(3, 3, []float64{1, 0, 0, 0, 1, 0, 0, 0, 1})
 	var temp2 mat.Dense
 	temp2.Mul(&K, H)
-	temp2.Sub(&I, &temp2)
+	var temp3 mat.Dense
+	temp3.Sub(I, &temp2)
 	var newCovariance mat.Dense
-	newCovariance.Mul(&temp2, kf.covariance)
+	newCovariance.Mul(&temp3, kf.covariance)
 	kf.covariance = &newCovariance
 }
 
@@ -789,12 +787,12 @@ func (ech *ExtremeConditionsHandler) IsExtremeCondition(input *AdaptiveInput) bo
 	voltage := input.Voltage
 	
 	// Extreme offset
-	if offset > 10*time.Second {
+	if offset > 10*float64(time.Second) {
 		return true
 	}
 	
 	// Extreme jitter
-	if jitter > 100*time.Millisecond {
+	if jitter > 100*float64(time.Millisecond) {
 		return true
 	}
 	

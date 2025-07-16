@@ -1,8 +1,5 @@
 # Пример конфигурации TimeSource
 shiwatime:
-  license:
-    keyfile: "timebeat.lic"
-  
   config:
     peerids: "peerids.yml"
   
