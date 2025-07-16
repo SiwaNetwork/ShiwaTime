@@ -19,6 +19,7 @@ type ShiwaTimeConfig struct {
 	ClockSync  ClockSyncConfig  `yaml:"clock_sync"`
 	PTPTuning  PTPTuningConfig  `yaml:"ptp_tuning"`
 	SyncRTC    SyncRTCConfig    `yaml:"synchronise_rtc"`
+	PTPSquared PTPSquaredConfig `yaml:"ptpsquared"`
 	CLI        CLIConfig        `yaml:"cli"`
 	HTTP       HTTPConfig       `yaml:"http"`
 	Logging    LoggingConfig    `yaml:"logging"`
@@ -53,6 +54,7 @@ type TimeSourceConfig struct {
 	
 	// PTP-specific fields
 	Domain         int    `yaml:"domain" json:"domain"`
+	Profile        string `yaml:"profile" json:"profile"`
 	TransportType  string `yaml:"transport_type" json:"transport_type"`
 	NetworkTransport string `yaml:"network_transport" json:"network_transport"`
 	ClockClass     int    `yaml:"clock_class" json:"clock_class"`
@@ -279,4 +281,59 @@ type ILMConfig struct {
 	PolicyName  string `yaml:"policy_name,omitempty"`
 	PolicyFile  string `yaml:"policy_file,omitempty"`
 	CheckExists bool   `yaml:"check_exists,omitempty"`
+}
+
+// PTPSquaredConfig конфигурация PTP+Squared
+type PTPSquaredConfig struct {
+	Enable bool `yaml:"enable,omitempty"`
+	
+	// Discovery settings
+	Discovery DiscoveryConfig `yaml:"discovery,omitempty"`
+	
+	// Key management
+	KeyPath string `yaml:"keypath,omitempty"`
+	
+	// Network settings
+	Domains  []int  `yaml:"domains,omitempty"`
+	Interface string `yaml:"interface,omitempty"`
+	
+	// Capacity management
+	SeatsToOffer      int `yaml:"seats_to_offer,omitempty"`
+	SeatsToFill       int `yaml:"seats_to_fill,omitempty"`
+	ConcurrentSources int `yaml:"concurrent_sources,omitempty"`
+	
+	// Timing intervals
+	ActiveSyncInterval         int `yaml:"active_sync_interval,omitempty"`
+	ActiveDelayRequestInterval int `yaml:"active_delayrequest_interval,omitempty"`
+	MonitorSyncInterval        int `yaml:"monitor_sync_interval,omitempty"`
+	MonitorDelayRequestInterval int `yaml:"monitor_delayrequest_interval,omitempty"`
+	
+	// Quality and preferences
+	Capabilities     []string `yaml:"capabilities,omitempty"`
+	PreferenceScore int      `yaml:"preference_score,omitempty"`
+	Reservations    []string `yaml:"reservations,omitempty"`
+	
+	// Debug settings
+	Debug bool `yaml:"debug,omitempty"`
+	
+	// Advanced settings
+	Advanced PTPSquaredAdvancedConfig `yaml:"advanced,omitempty"`
+}
+
+// DiscoveryConfig настройки обнаружения узлов
+type DiscoveryConfig struct {
+	MDNS        bool     `yaml:"mdns,omitempty"`
+	DHT         bool     `yaml:"dht,omitempty"`
+	DHTSeedList []string `yaml:"dht_seed_list,omitempty"`
+}
+
+// PTPSquaredAdvancedConfig расширенные настройки PTP+Squared
+type PTPSquaredAdvancedConfig struct {
+	AsymmetryCompensation float64 `yaml:"asymmetry_compensation,omitempty"`
+	IsBetterFactor        float64 `yaml:"is_better_factor,omitempty"`
+	EOSWeight            float64 `yaml:"eos_weight,omitempty"`
+	BaseHopCost          float64 `yaml:"base_hop_cost,omitempty"`
+	SWTSCost             float64 `yaml:"swts_cost,omitempty"`
+	HWTSCost             float64 `yaml:"hwts_cost,omitempty"`
+	LatencyAnalysisEnable bool   `yaml:"latency_analysis_enable,omitempty"`
 }

@@ -1,0 +1,131 @@
+# Пример конфигурации PTP+Squared
+# Распределенная P2P синхронизация времени на базе libp2p
+
+shiwatime:
+  # Основные настройки
+  license:
+    keyfile: '/etc/timebeat/timebeat.lic'
+  
+  config:
+    peerids: '/etc/timebeat/peerids.json'
+  
+  # Конфигурация синхронизации часов
+  clock_sync:
+    adjust_clock: true
+    step_limit: 15m
+    
+    primary_clocks:
+      # PTP+Squared как основной источник времени
+      - type: ptpsquared
+        interface: eth0
+        domains: [115, 116]
+        seats_to_offer: 4
+        seats_to_fill: 3
+        concurrent_sources: 1
+        capabilities: ["hqosc-1500"]
+        preference_score: 0
+        reservations: ["1500:50%:115,116", "750:25%"]
+        group: ptpsquared_primary
+        logsource: 'PTP+Squared Primary'
+    
+    secondary_clocks:
+      # Резервные источники времени
+      - type: ntp
+        host: 'pool.ntp.org'
+        port: 123
+        polling_interval: 4s
+        group: ntp_backup
+        logsource: 'NTP Backup'
+      
+      - type: ptp
+        interface: eth0
+        domain: 0
+        profile: 'G.8275.2'
+        group: ptp_backup
+        logsource: 'PTP Backup'
+  
+  # Конфигурация PTP+Squared
+  ptpsquared:
+    enable: true
+    
+    # Настройки обнаружения
+    discovery:
+      mdns: true
+      dht: false
+      dht_seed_list: 
+        - "/ip4/10.101.101.23/tcp/65107/p2p/16Uiu2HAmJiQvJQbja8pf5dKAZsSYxWmcDCxZaoYbMUL5X7GnXej9"
+    
+    # Управление ключами
+    keypath: "/etc/timebeat/ptp2key.private"
+    
+    # Сетевые настройки
+    domains: [115, 116]
+    interface: eth0
+    
+    # Управление емкостью
+    seats_to_offer: 4
+    seats_to_fill: 3
+    concurrent_sources: 1
+    
+    # Интервалы синхронизации
+    active_sync_interval: -3
+    active_delayrequest_interval: -3
+    monitor_sync_interval: 0
+    monitor_delayrequest_interval: 0
+    
+    # Качество и предпочтения
+    capabilities: ["hqosc-1500"]
+    preference_score: 0
+    reservations: ["1500:50%:115,116", "750:25%"]
+    
+    # Отладка
+    debug: false
+    
+    # Расширенные настройки
+    advanced:
+      asymmetry_compensation: 0
+      is_better_factor: 1.4
+      eos_weight: 1.0
+      base_hop_cost: 0.0
+      swts_cost: 0.0
+      hwts_cost: 0.0
+      latency_analysis_enable: false
+  
+  # Настройки CLI
+  cli:
+    enable: true
+    bind_port: 65129
+    bind_host: "127.0.0.1"
+    username: "admin"
+    password: "password"
+  
+  # Настройки HTTP
+  http:
+    enable: true
+    bind_port: 8088
+    bind_host: "127.0.0.1"
+  
+  # Настройки логирования
+  logging:
+    buffer_size: 1024
+    stdout:
+      enable: true
+    syslog:
+      enable: false
+
+# Выходные данные
+output:
+  type: "native"
+  elasticsearch:
+    hosts: ["localhost:9200"]
+    protocol: "http"
+    index: "shiwatime-%{+yyyy.MM.dd}"
+    template:
+      name: "shiwatime"
+      pattern: "shiwatime-*"
+
+# Настройки мониторинга
+monitoring:
+  enabled: true
+  elasticsearch:
+    hosts: ["localhost:9200"]

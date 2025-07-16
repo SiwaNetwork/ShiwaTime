@@ -22,6 +22,8 @@ func NewTimeSourceHandler(config config.TimeSourceConfig, logger *logrus.Logger)
 		return NewNTPHandler(config, logger)
 	case "ptp":
 		return NewPTPHandler(config, logger)
+	case "ptpsquared":
+		return NewPTPSquaredHandler(config, logger)
 	case "pps":
 		return NewPPSHandler(config, logger)
 	case "phc":
@@ -42,6 +44,7 @@ func GetSupportedProtocols() []string {
 	return []string{
 		"ntp",
 		"ptp", 
+		"ptpsquared",
 		"pps",
 		"phc",
 		"nmea",
@@ -67,6 +70,8 @@ func GetProtocolDescription(protocol string) string {
 		return "Network Time Protocol - синхронизация времени через сеть"
 	case "ptp":
 		return "Precision Time Protocol (IEEE 1588) - высокоточная сетевая синхронизация"
+	case "ptpsquared":
+		return "PTP+Squared - распределенная P2P синхронизация времени на базе libp2p"
 	case "pps":
 		return "Pulse Per Second - аппаратные импульсы синхронизации"
 	case "phc":
@@ -109,6 +114,10 @@ func ValidateConfig(config config.TimeSourceConfig) error {
 		if config.Domain < 0 || config.Domain > 255 {
 			return fmt.Errorf("PTP domain must be between 0 and 255")
 		}
+
+	case "ptpsquared":
+		// PTP+Squared не требует специальной валидации, так как использует libp2p
+		// для автоматического обнаружения и подключения
 
 	case "pps":
 		if config.Device == "" && config.GPIOPin == 0 {
@@ -157,6 +166,10 @@ func GetDefaultConfig(protocol string) config.TimeSourceConfig {
 		cfg.LogAnnounceInterval = 1
 		cfg.LogSyncInterval = 0
 		cfg.LogDelayReqInterval = 0
+
+	case "ptpsquared":
+		// PTP+Squared использует libp2p для автоматической настройки
+		cfg.Domains = []int{115, 116} // Default domains
 
 	case "pps":
 		cfg.PPSMode = "rising"
