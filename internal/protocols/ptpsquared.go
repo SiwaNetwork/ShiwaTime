@@ -16,7 +16,6 @@ import (
 	"github.com/libp2p/go-libp2p/p2p/discovery/mdns"
 	"github.com/libp2p/go-libp2p/p2p/security/noise"
 	"github.com/libp2p/go-libp2p-pubsub"
-	"github.com/multiformats/go-multiaddr"
 	"github.com/sirupsen/logrus"
 	"github.com/shiwatime/shiwatime/internal/config"
 )
@@ -271,6 +270,18 @@ func (h *ptpsquaredHandler) GetStatus() ConnectionStatus {
 // GetConfig получает конфигурацию
 func (h *ptpsquaredHandler) GetConfig() config.TimeSourceConfig {
 	return h.config
+}
+
+// GetGNSSInfo возвращает GNSS информацию (PTP+Squared не поддерживает GNSS напрямую)
+func (h *ptpsquaredHandler) GetGNSSInfo() GNSSStatus {
+	return GNSSStatus{
+		FixType:         0, // No fix
+		FixQuality:      0,
+		SatellitesUsed:  0,
+		SatellitesVisible: 0,
+		HDOP:            0,
+		VDOP:            0,
+	}
 }
 
 // GetPeerID получает ID пира

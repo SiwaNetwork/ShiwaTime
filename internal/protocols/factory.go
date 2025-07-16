@@ -32,6 +32,8 @@ func NewTimeSourceHandler(config config.TimeSourceConfig, logger *logrus.Logger)
 		return NewNMEAHandler(config, logger)
 	case "timecard":
 		return NewTimecardHandler(config, logger)
+	case "ocp_timecard":
+		return NewOCPTimecardHandler(config, logger)
 	case "mock":
 		return NewMockHandler(config, logger)
 	case "timesource":
@@ -51,6 +53,7 @@ func GetSupportedProtocols() []string {
 		"phc",
 		"nmea",
 		"timecard",
+		"ocp_timecard",
 		"mock",
 		"timesource",
 	}
@@ -83,6 +86,8 @@ func GetProtocolDescription(protocol string) string {
 		return "NMEA - синхронизация с GPS/GNSS приемников"
 	case "timecard":
 		return "Timecard - специализированные карты точного времени"
+	case "ocp_timecard":
+		return "OCP Timecard - карты точного времени OCP Time Appliance Project"
 	case "mock":
 		return "Mock - тестовый источник времени"
 	case "timesource":
@@ -146,6 +151,13 @@ func ValidateConfig(config config.TimeSourceConfig) error {
 		if config.Device == "" {
 			return fmt.Errorf("device is required for Timecard")
 		}
+	case "ocp_timecard":
+		if config.OCPDevice < 0 {
+			return fmt.Errorf("ocp_device must be >= 0 for OCP Timecard")
+		}
+		if config.OscillatorType == "" {
+			config.OscillatorType = "timebeat-rb-ql" // default
+		}
 	case "timesource":
 		// TimeSource не требует специальной валидации, так как является универсальным обработчиком
 	}
@@ -193,6 +205,8 @@ func GetDefaultConfig(protocol string) config.TimeSourceConfig {
 
 	case "timecard":
 		// Default timecard config
+	case "ocp_timecard":
+		// Default ocp_timecard config
 	case "timesource":
 		// Default timesource config
 	}

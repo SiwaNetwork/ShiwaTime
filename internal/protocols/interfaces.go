@@ -40,6 +40,9 @@ type TimeSourceHandler interface {
 	
 	// GetConfig получает конфигурацию
 	GetConfig() config.TimeSourceConfig
+	
+	// GetGNSSInfo получает информацию о GNSS (если поддерживается)
+	GetGNSSInfo() GNSSStatus
 }
 
 // ConnectionStatus статус соединения с источником времени

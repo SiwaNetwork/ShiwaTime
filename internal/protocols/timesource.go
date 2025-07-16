@@ -337,6 +337,31 @@ func (h *TimeSourceHandlerImpl) GetConfig() config.TimeSourceConfig {
 	return h.config
 }
 
+// GetGNSSInfo получает информацию о GNSS (если поддерживается)
+func (h *TimeSourceHandlerImpl) GetGNSSInfo() GNSSStatus {
+	h.mutex.RLock()
+	defer h.mutex.RUnlock()
+
+	// Получение GNSS информации от соответствующего обработчика
+	switch h.config.TimeSourceType {
+	case "nmea":
+		if h.nmeaHandler != nil {
+			return h.nmeaHandler.GetGNSSInfo()
+		}
+	case "timecard":
+		if h.timecardHandler != nil {
+			return h.timecardHandler.GetGNSSInfo()
+		}
+	case "ocp_timecard":
+		if h.timecardHandler != nil {
+			return h.timecardHandler.GetGNSSInfo()
+		}
+	}
+
+	// Возвращаем пустой статус для протоколов без GNSS
+	return GNSSStatus{}
+}
+
 // monitor мониторинг состояния обработчика
 func (h *TimeSourceHandlerImpl) monitor() {
 	ticker := time.NewTicker(5 * time.Second)

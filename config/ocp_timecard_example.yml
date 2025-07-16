@@ -1,0 +1,153 @@
+# Пример конфигурации для OCP Timecard
+# OCP Time Appliance Project Time Card
+
+timebeat:
+  license:
+    keyfile: '/etc/timebeat/timebeat.lic'
+  
+  config:
+    peerids: '/etc/timebeat/peerids.json'
+  
+  clock_sync:
+    adjust_clock: true
+    step_limit: 15m
+    
+    primary_clocks:
+      # OCP Timecard - основная конфигурация
+      - protocol:          ocp_timecard
+        ocp_device:        0                   # Device id (/sys/class/timecard/ocpX)
+        oscillator_type:   'timebeat-rb-ql'    # Тип осциллятора
+        card_config:
+          - 'sma1:out:mac'                     # sma1-4: in/out: gnss1, gnss2, mac, phc etc.
+          - 'sma2:in:gnss1'                    # SMA2 как вход GNSS1
+          - 'sma3:out:phc'                     # SMA3 как выход PHC
+          - 'sma4:in:gnss2'                    # SMA4 как вход GNSS2 (если есть)
+          - 'gnss1:signal:gps+galileo+sbas'    # gnss1-2: signal: gps, galileo, sbas, beidou, qzss, glonass
+          - 'gnss2:signal:gps+galileo'         # Второй GNSS приемник (если есть)
+          - 'osc:type:timebeat-rb-ql'          # osc: type: timebeat-rb-ql, timebeat-rb-sa45,
+                                               #            timebeat-fusion-xt, timebeat-ocxo-rod
+        offset:            0                   # В наносекундах. Статическая компенсация
+        atomic:            false               # Указывает, является ли осциллятор атомным
+        monitor_only:      false               # Только мониторинг без управления часами
+        weight:            10                  # Приоритет источника времени
+        
+        # Дополнительные опции
+        options:
+          pci_addr:        "0000:02:00.0"     # PCI адрес устройства (опционально)
+          shm_segment:     "0"                 # SHM сегмент для chrony/ntpd (опционально)
+    
+    secondary_clocks:
+      # Резервные источники времени
+      - protocol:          ntp
+        host:              'pool.ntp.org'
+        port:              123
+        weight:            1
+        monitor_only:      false
+        
+      - protocol:          pps
+        device:            '/dev/pps0'
+        weight:            5
+        monitor_only:      false
+
+  # Настройки PTP
+  ptp_tuning:
+    enable_ptp_global_sockets: true
+    relax_delay_requests:      true
+    auto_discover_enabled:     true
+    multicast_ttl:             1
+    ptp_standard:              'G.8275.2'
+    
+    dscp:
+      general: 'CS6'
+      event:   'CS7'
+    
+    clock_quality:
+      auto:      true
+      class:     6
+      accuracy:  'Time_Within_1s'
+      variance:  'Variance_Unknown'
+      timesource: 'GPS'
+    
+    phc:
+      phc_offset_strategy:     ['samples']
+      phc_local_pref:         ['local']
+      phc_smoothing_strategy:  ['linear']
+      phc_lp_filter_enabled:   true
+      phc_ng_filter_enabled:   true
+      phc_samples:             ['samples']
+      phc_one_step:            ['one_step']
+      tai_offset:              '37'
+      phc_offsets:             ['offsets']
+      pps_config:              ['pps_config']
+
+  # Синхронизация RTC
+  synchronise_rtc:
+    enable:         true
+    clock_interval: '11min'
+
+  # CLI интерфейс
+  cli:
+    enable:         true
+    bind_port:      22
+    bind_host:      '0.0.0.0'
+    server_key:     '/etc/timebeat/server.key'
+    authorised_keys: '/etc/timebeat/authorised_keys'
+    username:       'timebeat'
+    password:       ''
+
+  # HTTP интерфейс
+  http:
+    enable:   true
+    bind_port: 8080
+    bind_host: '0.0.0.0'
+
+  # Логирование
+  logging:
+    buffer_size: 1000
+    stdout:
+      enable: true
+    syslog:
+      enable: false
+      host: 'localhost'
+      port: 514
+
+# Настройки вывода метрик
+output:
+  type: 'native'
+  
+  elasticsearch:
+    hosts:
+      - 'http://localhost:9200'
+    protocol: 'http'
+    username: ''
+    password: ''
+    ssl:
+      verification_mode: 'none'
+
+# Настройки установки
+setup:
+  dashboards:
+    enabled:   true
+    url:       'http://localhost:5601'
+    directory: '/usr/share/timebeat/dashboards'
+  
+  ilm:
+    enabled:      true
+    policy_name:  'timebeat-policy'
+    policy_file:  '/etc/timebeat/ilm_policy.json'
+    check_exists: true
+
+# Имя и теги
+name: 'ocp-timecard-server'
+tags:
+  - 'ocp'
+  - 'timecard'
+  - 'gnss'
+  - 'ptp'
+
+# Дополнительные поля
+fields:
+  environment: 'production'
+  datacenter: 'dc1'
+  rack: 'rack01'
+  server_type: 'ocp-timecard'

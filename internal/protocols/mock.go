@@ -79,3 +79,15 @@ func (h *MockHandler) GetStatus() ConnectionStatus {
 func (h *MockHandler) GetConfig() config.TimeSourceConfig {
 	return h.config
 }
+
+// GetGNSSInfo возвращает mock GNSS информацию
+func (h *MockHandler) GetGNSSInfo() GNSSStatus {
+	return GNSSStatus{
+		FixType:         1, // GPS fix
+		FixQuality:      1, // Good
+		SatellitesUsed:  8,
+		SatellitesVisible: 12,
+		HDOP:            1.2,
+		VDOP:            1.8,
+	}
+}
