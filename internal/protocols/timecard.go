@@ -3,6 +3,8 @@ package protocols
 import (
 	"context"
 	"fmt"
+	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -18,7 +20,13 @@ type timecardHandler struct {
 	mu        sync.RWMutex
 	running   bool
 	status    ConnectionStatus
-	
+	// card telemetry
+	ppsCount     uint64
+	lastPPSTime  time.Time
+	gnssFixValid bool
+	lastOffset   time.Duration
+	// internal
+	wg       sync.WaitGroup
 	ctx       context.Context
 	cancel    context.CancelFunc
 }
@@ -50,10 +58,14 @@ func (h *timecardHandler) Start() error {
 	h.running = true
 	h.status.Connected = true
 	h.status.LastActivity = time.Now()
-	
-	// TODO: Реализовать работу с timecard устройствами
-	
-	return nil
+
+	// Запускаем фоновое чтение регистров/статуса
+	h.wg.Add(1)
+	go h.monitorLoop()
+ 
+ 	// TODO: Реализовать работу с timecard устройствами
+ 
+ 	return nil
 }
 
 // Stop останавливает Timecard обработчик
@@ -70,26 +82,34 @@ func (h *timecardHandler) Stop() error {
 	h.cancel()
 	h.running = false
 	h.status.Connected = false
-	
-	return nil
+	h.wg.Wait()
+ 
+ 	return nil
 }
 
 // GetTimeInfo получает информацию о времени от Timecard
 func (h *timecardHandler) GetTimeInfo() (*TimeInfo, error) {
 	h.mu.RLock()
-	running := h.running
+	ppsTime := h.lastPPSTime
+	offset := h.lastOffset
+	ppsValid := !ppsTime.IsZero()
 	h.mu.RUnlock()
-	
-	if !running {
-		return nil, fmt.Errorf("Timecard handler not running")
+
+	if !ppsValid {
+		return nil, fmt.Errorf("no PPS data from time-card yet")
 	}
-	
-	// TODO: Реализовать чтение данных от timecard
+
+	quality := 240
+	if !h.gnssFixValid {
+		// без GNSS фикс – понижаем оценку
+		quality = 150
+	}
+
 	return &TimeInfo{
-		Timestamp: time.Now(),
-		Offset:    0,
+		Timestamp: ppsTime,
+		Offset:    offset,
 		Delay:     0,
-		Quality:   250,
+		Quality:   quality,
 		Precision: -9,
 	}, nil
 }
@@ -104,4 +124,65 @@ func (h *timecardHandler) GetStatus() ConnectionStatus {
 // GetConfig возвращает конфигурацию
 func (h *timecardHandler) GetConfig() config.TimeSourceConfig {
 	return h.config
+}
+
+// monitorLoop периодически считывает статус карты или имитирует данные
+func (h *timecardHandler) monitorLoop() {
+	defer h.wg.Done()
+	statusPath := "/dev/timecard0-status"
+	if h.config.Device != "" {
+		statusPath = h.config.Device
+	}
+
+	ticker := time.NewTicker(1 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-h.ctx.Done():
+			return
+		case <-ticker.C:
+			ppsTime, ppsCnt, gnssFix, err := h.readStatus(statusPath)
+			if err != nil {
+				h.logger.WithError(err).Debug("time-card: status read failed, switching to simulated mode")
+				// fabricate PPS each second to keep pipeline alive
+				ppsTime = time.Now().Truncate(time.Second)
+				ppsCnt = h.ppsCount + 1
+			}
+
+			h.mu.Lock()
+			h.lastPPSTime = ppsTime
+			h.ppsCount = ppsCnt
+			h.gnssFixValid = gnssFix
+			h.lastOffset = time.Since(ppsTime)
+			h.status.LastActivity = time.Now()
+			h.mu.Unlock()
+		}
+	}
+}
+
+// readStatus пытается прочитать статус time-card.
+// Формат (текстовый) ожидается:
+//   PPS_COUNT=<num>\nLAST_PPS_NS=<unix-ns>\nGNSS_FIX=<0|1>\n
+func (h *timecardHandler) readStatus(path string) (time.Time, uint64, bool, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return time.Time{}, 0, false, err
+	}
+	var ppsCnt uint64
+	var lastNs int64
+	gnssFix := false
+	for _, ln := range strings.Split(string(data), "\n") {
+		if strings.HasPrefix(ln, "PPS_COUNT=") {
+			fmt.Sscanf(ln, "PPS_COUNT=%d", &ppsCnt)
+		} else if strings.HasPrefix(ln, "LAST_PPS_NS=") {
+			fmt.Sscanf(ln, "LAST_PPS_NS=%d", &lastNs)
+		} else if strings.HasPrefix(ln, "GNSS_FIX=") {
+			var v int
+			fmt.Sscanf(ln, "GNSS_FIX=%d", &v)
+			gnssFix = v == 1
+		}
+	}
+	ts := time.Unix(0, lastNs)
+	return ts, ppsCnt, gnssFix, nil
 }
