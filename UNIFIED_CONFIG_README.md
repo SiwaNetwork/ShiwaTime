@@ -1,194 +1,116 @@
-# Timebeat Unified Configuration
+# Timebeat Unified Complete Configuration
 
-This document describes the unified Timebeat configuration that includes the Timebeat Timecard Mini functionality.
+Этот документ описывает единую конфигурацию Timebeat, которая объединяет все настройки в один файл.
 
-## Overview
+## Обзор
 
-The unified configuration combines all Timebeat protocols and features into a single, comprehensive configuration file. This includes the newly added **Timebeat Timecard Mini** support.
+Единая конфигурация объединяет все протоколы и функции Timebeat в один комплексный конфигурационный файл. Это включает поддержку **Timebeat Timecard Mini** и все активные протоколы синхронизации времени.
 
-## Configuration Files
+## Структура файлов
 
-### 1. `timebeat-unified.yml` - Main Unified Configuration
-This is the complete unified configuration file that includes:
-- PTP (Precision Time Protocol) configuration
-- NTP (Network Time Protocol) configuration  
-- PPS (Pulse Per Second) configuration
-- NMEA-GNSS configuration
-- PHC (PTP Hardware Clock) configuration
-- **Timebeat Timecard Mini** configuration
-- Elasticsearch output configuration
-- Logging and monitoring settings
+### 1. `timebeat-unified-complete.yml` - Единый конфигурационный файл
+Это полный единый конфигурационный файл, который включает:
+- **PTP (Precision Time Protocol)** конфигурация - АКТИВНА
+- **NTP (Network Time Protocol)** конфигурация - АКТИВНА
+- **PPS (Pulse Per Second)** конфигурация - АКТИВНА
+- **NMEA-GNSS** конфигурация - АКТИВНА
+- **PHC (PTP Hardware Clock)** конфигурация - АКТИВНА
+- **Timebeat Timecard Mini** конфигурация - АКТИВНА
+- **Elasticsearch** настройки вывода
+- **Логирование и мониторинг** настройки
+- **Все расширенные настройки** и примеры
 
-### 2. `timebeat-active-protocols.yml` - Active Protocols Configuration
-Contains all active protocols with the Timebeat Timecard Mini enabled.
+### 2. `fields.yml` - Отдельный файл полей Elasticsearch
+- Остается как отдельный файл (как требовалось)
+- Определяет структуру данных для Elasticsearch
+- Содержит полную схему ECS (Elastic Common Schema)
 
-### 3. `timebeat.yml` - Original Configuration (Updated)
-The original configuration file has been updated to include the Timebeat Timecard Mini configuration.
+### 3. `replace_config.sh` - Скрипт замены конфигурации
+- Автоматически заменяет старый конфигурационный файл на новый
+- Создает резервную копию
+- Проверяет синтаксис
+- Перезапускает службу
 
-## Timebeat Timecard Mini Configuration
+## Преимущества единой конфигурации
 
-The Timebeat Timecard Mini has been added with the following configuration:
+1. **Упрощение управления**: Один файл вместо нескольких
+2. **Полная функциональность**: Все протоколы и настройки в одном месте
+3. **Активные настройки**: Все протоколы готовы к использованию
+4. **Документация**: Подробные комментарии и примеры
+5. **Безопасность**: Автоматическое создание резервных копий
 
-```yaml
-- protocol:     timebeat_opentimecard_mini   # Timebeat Timecard Mini
-  device:       '/dev/ttyS4'             # Serial device path
-  baud:         9600                     # Serial device baud rate
-  card_config:  ['gnss1:signal:gps+glonass+galileo']
-  offset:       0                        # Static offset of RMC line
-  atomic:       false                    # Indicate if oscillator is atomic
-  monitor_only: false
-  group:        timecard_mini_secondary
-  logsource:    'Timebeat Timecard Mini'
-```
+## Установка и настройка
 
-### Configuration Parameters
-
-- **protocol**: `timebeat_opentimecard_mini` - Specifies the Timebeat Timecard Mini protocol
-- **device**: `/dev/ttyS4` - Serial device path for communication
-- **baud**: `9600` - Serial communication baud rate
-- **card_config**: `['gnss1:signal:gps+glonass+galileo']` - GNSS signal configuration
-  - Supports GPS, GLONASS, and Galileo satellite systems
-- **offset**: `0` - Static offset for RMC line (in nanoseconds)
-- **atomic**: `false` - Indicates if the oscillator is atomic
-- **monitor_only**: `false` - Enables clock steering (not just monitoring)
-- **group**: `timecard_mini_secondary` - Groups this source with other secondary clocks
-- **logsource**: `'Timebeat Timecard Mini'` - Identifies this source in logs
-
-## Installation and Setup
-
-### Using the Setup Script
-
-The `setup_unified_config.sh` script provides easy management of the unified configuration:
+### Использование скрипта замены
 
 ```bash
-# Install the unified configuration
-sudo ./setup_unified_config.sh install
-
-# Check current status
-sudo ./setup_unified_config.sh status
-
-# Validate configuration
-sudo ./setup_unified_config.sh validate
-
-# Restart Timebeat service
-sudo ./setup_unified_config.sh restart
-
-# Backup existing configuration
-sudo ./setup_unified_config.sh backup
+# Запуск скрипта замены (требует sudo)
+sudo ./replace_config.sh
 ```
 
-### Manual Installation
+Скрипт выполнит следующие действия:
+1. Создаст резервную копию текущего конфигурационного файла
+2. Скопирует новый единый конфигурационный файл
+3. Установит правильные права доступа
+4. Проверит синтаксис конфигурации
+5. Перезапустит службу Timebeat
+6. Проверит статус службы
 
-1. **Backup existing configuration**:
+### Ручная установка
+
+1. **Создание резервной копии**:
    ```bash
    sudo cp /etc/timebeat/timebeat.yml /etc/timebeat/timebeat.yml.backup
    ```
 
-2. **Install unified configuration**:
+2. **Установка единой конфигурации**:
    ```bash
-   sudo cp timebeat-unified.yml /etc/timebeat/timebeat.yml
+   sudo cp timebeat-unified-complete.yml /etc/timebeat/timebeat.yml
    sudo chmod 644 /etc/timebeat/timebeat.yml
    sudo chown root:root /etc/timebeat/timebeat.yml
    ```
 
-3. **Validate configuration**:
+3. **Проверка конфигурации**:
    ```bash
    sudo timebeat test config -c /etc/timebeat/timebeat.yml
    ```
 
-4. **Restart Timebeat service**:
+4. **Перезапуск службы**:
    ```bash
    sudo systemctl restart timebeat
    ```
 
-## Hardware Requirements
+## Активные протоколы в единой конфигурации
 
-### Timebeat Timecard Mini
-- **Serial Interface**: `/dev/ttyS4` (configurable)
-- **Baud Rate**: 9600 (configurable)
-- **GNSS Support**: GPS, GLONASS, Galileo
-- **Communication**: 8N1 (8 data bits, no parity, 1 stop bit)
+### Первичные часы (Primary Clocks)
+- **PTP Domain 0**: Активен с поддержкой unicast/multicast
+- **NTP**: pool.ntp.org как основной источник
+- **PPS**: Аппаратный PPS сигнал
 
-### System Requirements
-- Linux system with serial port support
-- Timebeat software installed
-- Proper permissions for serial device access
+### Вторичные часы (Secondary Clocks)
+- **NMEA-GNSS**: Последовательный порт /dev/ttyS0
+- **PHC**: Аппаратные часы /dev/ptp0
+- **Timebeat Timecard Mini**: /dev/ttyS4 с GPS/GLONASS/Galileo
+- **Backup NTP**: time.cloudflare.com как резервный
 
-## Verification
+### PHC синхронизация
+- Включена синхронизация PHC
+- Настроены стратегии смещения и сглаживания
+- Включены фильтры выбросов
 
-### Check Device Availability
-```bash
-# Check if serial device exists
-ls -la /dev/ttyS4
+## Группировка источников времени
 
-# Check device permissions
-ls -la /dev/ttyS*
-```
+Конфигурация организует источники времени в группы:
 
-### Check Configuration
-```bash
-# Verify Timebeat Timecard Mini is configured
-grep -A 10 "timebeat_opentimecard_mini" /etc/timebeat/timebeat.yml
+- **Первичные**: `ptp_primary`, `ntp_primary`, `pps_primary`
+- **Вторичные**: `nmea_secondary`, `phc_secondary`, `timecard_mini_secondary`, `ntp_backup`
 
-# Check Timebeat service status
-systemctl status timebeat
-```
+Это позволяет лучше управлять и мониторить различные источники времени.
 
-### Check Logs
-```bash
-# View Timebeat logs
-journalctl -u timebeat -f
+## Мониторинг
 
-# Check for Timecard Mini messages
-journalctl -u timebeat | grep "Timebeat Timecard Mini"
-```
-
-## Troubleshooting
-
-### Common Issues
-
-1. **Serial device not found**:
-   - Verify the device path `/dev/ttyS4` exists
-   - Check if the device is properly connected
-   - Ensure proper permissions (user should be in `dialout` group)
-
-2. **Permission denied**:
-   ```bash
-   sudo usermod -a -G dialout $USER
-   # Log out and back in, or reboot
-   ```
-
-3. **Configuration validation fails**:
-   - Check YAML syntax
-   - Verify all required parameters are present
-   - Ensure proper indentation
-
-4. **Service won't start**:
-   - Check logs: `journalctl -u timebeat -n 50`
-   - Verify configuration: `timebeat test config`
-   - Check file permissions
-
-### Debug Mode
-
-Enable debug logging by modifying the configuration:
-
-```yaml
-logging.level: debug
-```
-
-## Configuration Groups
-
-The unified configuration organizes time sources into groups:
-
-- **Primary Clocks**: `ptp_primary`, `ntp_primary`, `pps_primary`
-- **Secondary Clocks**: `nmea_secondary`, `phc_secondary`, `timecard_mini_secondary`, `ntp_backup`
-
-This grouping allows for better management and monitoring of different time sources.
-
-## Monitoring
-
-### Elasticsearch Integration
-The configuration includes Elasticsearch output for centralized monitoring:
+### Elasticsearch интеграция
+Конфигурация включает настройки вывода в Elasticsearch:
 
 ```yaml
 output.elasticsearch:
@@ -196,34 +118,68 @@ output.elasticsearch:
   index: "timebeat-%{+yyyy.MM.dd}"
 ```
 
-### Logging
-Comprehensive logging is configured:
-
+### Логирование
+Настроено комплексное логирование:
 ```yaml
-logging.level: info
 logging.to_files: true
 logging.files:
   path: /var/log/timebeat
   name: timebeat
+  rotateeverybytes: 10485760
+  keepfiles: 7
 ```
 
-## Security Considerations
+## Проверка работы
 
-- Configuration files have restricted permissions (644)
-- Service runs with appropriate security settings
-- Seccomp is disabled for compatibility
-- Monitoring is enabled for security oversight
+### Проверка статуса службы
+```bash
+systemctl status timebeat
+```
 
-## Support
+### Просмотр логов
+```bash
+journalctl -u timebeat -f
+```
 
-For issues related to:
-- **Timebeat Timecard Mini**: Contact Timebeat support
-- **Configuration**: Check this documentation and logs
-- **Hardware**: Verify serial connections and device availability
+### Проверка конфигурации
+```bash
+timebeat test config -c /etc/timebeat/timebeat.yml
+```
 
-## Version Information
+## Устранение неполадок
 
-- **Configuration Version**: 1.0
-- **Timebeat Timecard Mini**: Added and configured
-- **Last Updated**: $(date)
-- **Compatible Timebeat Version**: 2.2.20+
+### Частые проблемы
+
+1. **Служба не запускается**:
+   ```bash
+   journalctl -u timebeat -n 50
+   timebeat test config
+   ```
+
+2. **Ошибки синтаксиса**:
+   - Проверьте отступы в YAML
+   - Убедитесь в правильности структуры
+
+3. **Проблемы с правами доступа**:
+   ```bash
+   sudo chmod 644 /etc/timebeat/timebeat.yml
+   sudo chown root:root /etc/timebeat/timebeat.yml
+   ```
+
+### Восстановление из резервной копии
+```bash
+sudo cp /etc/timebeat/timebeat.yml.backup /etc/timebeat/timebeat.yml
+sudo systemctl restart timebeat
+```
+
+## Отличия от предыдущих версий
+
+1. **Единый файл**: Все настройки в одном файле вместо нескольких
+2. **Активные протоколы**: Все протоколы включены и готовы к работе
+3. **Улучшенная документация**: Подробные комментарии для каждого раздела
+4. **Автоматизация**: Скрипт для безопасной замены конфигурации
+5. **Сохранение fields.yml**: Остается как отдельный файл
+
+## Заключение
+
+Единая конфигурация Timebeat предоставляет полную функциональность в одном файле, упрощая управление и развертывание системы синхронизации времени. Все протоколы активны и готовы к использованию, а файл `fields.yml` остается отдельным для совместимости с Elasticsearch.
