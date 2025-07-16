@@ -4,7 +4,7 @@
 #             / /  / // / / / / //  __// /_/ //  __// /_/ // /_
 #            /_/  /_//_/ /_/ /_/ \___//_.___/ \___/ \__,_/ \__/
 
-################### Timebeat Configuration - All Protocols Active #########################
+################### Timebeat Unified Configuration #########################
 
 timebeat:
 
@@ -35,7 +35,7 @@ timebeat:
         announce_interval:        1
         sync_interval:            0
         delayrequest_interval:    0
-        disable:                  false  # АКТИВИРОВАН
+        disable:                  false
         delay_strategy:          e2e
         priority1:               128
         priority2:               128
@@ -54,7 +54,7 @@ timebeat:
         interface:     eth0
         group:         ntp_primary
 
-      # PPS Configuration - АКТИВИРОВАН
+      # PPS Configuration
       - protocol:          pps
         interface:         eth0
         pin:               0
@@ -69,7 +69,7 @@ timebeat:
 
     secondary_clocks:
 
-      # NMEA-GNSS Configuration - АКТИВИРОВАН
+      # NMEA-GNSS Configuration
       - protocol:     nmea
         device:       '/dev/ttyS0'
         baud:         9600
@@ -78,7 +78,7 @@ timebeat:
         group:        nmea_secondary
         logsource:    'NMEA GNSS Secondary'
 
-      # PHC Configuration - АКТИВИРОВАН
+      # PHC Configuration
       - protocol:     phc
         device:       '/dev/ptp0'
         offset:       0
@@ -86,7 +86,7 @@ timebeat:
         group:        phc_secondary
         logsource:    'PHC Hardware Clock'
 
-      # Timebeat Timecard Mini - АКТИВИРОВАН
+      # Timebeat Timecard Mini Configuration
       - protocol:     timebeat_opentimecard_mini   # Timebeat Timecard Mini
         device:       '/dev/ttyS4'             # Serial device path
         baud:         9600                     # Serial device baud rate
