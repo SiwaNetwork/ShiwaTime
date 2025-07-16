@@ -1,0 +1,31 @@
+[Unit]
+Description=Timebeat SSH CLI Interface
+After=network.target
+Wants=timebeat.service
+
+[Service]
+Type=simple
+User=timebeat
+Group=timebeat
+WorkingDirectory=/opt/timebeat-ssh-cli
+ExecStart=/usr/bin/python3 /opt/timebeat-ssh-cli/timebeat_ssh_cli.py
+Restart=always
+RestartSec=10
+
+# Создание директорий логов
+ExecStartPre=/bin/mkdir -p /var/log/timebeat
+ExecStartPre=/bin/chown timebeat:timebeat /var/log/timebeat
+
+# Переменные окружения
+Environment=PYTHONPATH=/opt/timebeat-ssh-cli
+Environment=HOME=/home/timebeat
+
+# Безопасность
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ReadWritePaths=/var/log/timebeat /etc/timebeat
+ProtectHome=yes
+
+[Install]
+WantedBy=multi-user.target
