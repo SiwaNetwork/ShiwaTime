@@ -34,6 +34,8 @@ func NewTimeSourceHandler(config config.TimeSourceConfig, logger *logrus.Logger)
 		return NewTimecardHandler(config, logger)
 	case "mock":
 		return NewMockHandler(config, logger)
+	case "timesource":
+		return NewTimeSourceHandlerImpl(config, logger)
 	default:
 		return nil, fmt.Errorf("unknown time source type: %s", config.Type)
 	}
@@ -50,6 +52,7 @@ func GetSupportedProtocols() []string {
 		"nmea",
 		"timecard",
 		"mock",
+		"timesource",
 	}
 }
 
@@ -82,6 +85,8 @@ func GetProtocolDescription(protocol string) string {
 		return "Timecard - специализированные карты точного времени"
 	case "mock":
 		return "Mock - тестовый источник времени"
+	case "timesource":
+		return "TimeSource - универсальный обработчик источников времени"
 	default:
 		return "Неизвестный протокол"
 	}
@@ -141,6 +146,8 @@ func ValidateConfig(config config.TimeSourceConfig) error {
 		if config.Device == "" {
 			return fmt.Errorf("device is required for Timecard")
 		}
+	case "timesource":
+		// TimeSource не требует специальной валидации, так как является универсальным обработчиком
 	}
 
 	return nil
@@ -169,7 +176,7 @@ func GetDefaultConfig(protocol string) config.TimeSourceConfig {
 
 	case "ptpsquared":
 		// PTP+Squared использует libp2p для автоматической настройки
-		cfg.Domains = []int{115, 116} // Default domains
+		// cfg.Domains = []int{115, 116} // Default domains - поле не существует в TimeSourceConfig
 
 	case "pps":
 		cfg.PPSMode = "rising"
@@ -186,6 +193,8 @@ func GetDefaultConfig(protocol string) config.TimeSourceConfig {
 
 	case "timecard":
 		// Default timecard config
+	case "timesource":
+		// Default timesource config
 	}
 
 	return cfg

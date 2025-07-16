@@ -1,0 +1,223 @@
+# Пример конфигурации TimeSource
+shiwatime:
+  license:
+    keyfile: "timebeat.lic"
+  
+  config:
+    peerids: "peerids.yml"
+  
+  clock_sync:
+    adjust_clock: true
+    step_limit: "0.128"
+    primary_clocks:
+      - type: "timesource"
+        host: "192.168.1.100"
+        port: 123
+        weight: 10
+        timesource_type: "ntp"
+        timesource_mode: "client"
+        timesource_config:
+          polling_interval: 64
+          max_offset: "1000ms"
+          max_delay: "100ms"
+          trust: true
+        polling_interval: 64
+        max_offset: 1000
+        max_delay: 100
+        trust: true
+        
+      - type: "timesource"
+        interface: "eth0"
+        weight: 8
+        timesource_type: "ptp"
+        timesource_mode: "slave"
+        timesource_config:
+          domain: 0
+          transport_type: "UDPv4"
+          log_announce_interval: 1
+          log_sync_interval: 0
+          log_delay_req_interval: 0
+        domain: 0
+        transport_type: "UDPv4"
+        log_announce_interval: 1
+        log_sync_interval: 0
+        log_delay_req_interval: 0
+        
+      - type: "timesource"
+        device: "/dev/ttyUSB0"
+        weight: 6
+        timesource_type: "nmea"
+        timesource_mode: "gps"
+        timesource_config:
+          baud_rate: 9600
+          data_bits: 8
+          stop_bits: 1
+          parity: "none"
+        baud_rate: 9600
+        data_bits: 8
+        stop_bits: 1
+        parity: "none"
+        
+      - type: "timesource"
+        device: "/dev/pps0"
+        weight: 5
+        timesource_type: "pps"
+        timesource_mode: "input"
+        timesource_config:
+          pps_mode: "rising"
+          pps_kernel: true
+        pps_mode: "rising"
+        pps_kernel: true
+        
+      - type: "timesource"
+        interface: "eth0"
+        weight: 4
+        timesource_type: "phc"
+        timesource_mode: "slave"
+        timesource_config:
+          phc_index: 0
+          hw_timestamping: true
+        phc_index: 0
+        
+    secondary_clocks:
+      - type: "timesource"
+        host: "pool.ntp.org"
+        port: 123
+        weight: 3
+        timesource_type: "ntp"
+        timesource_mode: "client"
+        timesource_config:
+          polling_interval: 128
+          max_offset: "2000ms"
+          max_delay: "200ms"
+        polling_interval: 128
+        max_offset: 2000
+        max_delay: 200
+        
+      - type: "timesource"
+        weight: 2
+        timesource_type: "mock"
+        timesource_mode: "test"
+        timesource_config:
+          offset: "10ms"
+          jitter: "5ms"
+          quality: 100
+        options:
+          offset: "10ms"
+          jitter: "5ms"
+          quality: "100"
+  
+  ptp_tuning:
+    enable_ptp_global_sockets: true
+    relax_delay_requests: true
+    auto_discover_enabled: true
+    multicast_ttl: 1
+    dscp:
+      general: "CS6"
+      event: "CS7"
+    synchronise_tx: []
+    ptp_standard: "IEEE 1588-2008"
+    clock_quality:
+      auto: true
+      class: 248
+      accuracy: "0xFE"
+      variance: "0xFFFF"
+      timesource: "0xA0"
+    phc:
+      phc_offset_strategy: ["auto"]
+      phc_local_pref: ["auto"]
+      smoothing_strategy: ["auto"]
+      phc_lp_filter_enabled: true
+      phc_ng_filter_enabled: true
+      phc_samples: ["auto"]
+      phc_one_step: ["auto"]
+      tai_offset: "37"
+      phc_offsets: ["auto"]
+      pps_config: ["auto"]
+  
+  synchronise_rtc:
+    enable: true
+    clock_interval: "11min"
+  
+  ptpsquared:
+    enable: true
+    discovery:
+      mdns: true
+      dht: true
+      dht_seed_list: []
+    keypath: "/etc/shiwatime/keys"
+    domains: [115, 116]
+    interface: "eth0"
+    seats_to_offer: 5
+    seats_to_fill: 3
+    concurrent_sources: 10
+    active_sync_interval: 1
+    active_delayrequest_interval: 1
+    monitor_sync_interval: 1
+    monitor_delayrequest_interval: 1
+    capabilities: ["gps", "ptp", "ntp"]
+    preference_score: 100
+    reservations: []
+    debug: false
+    advanced:
+      asymmetry_compensation: 0.0
+      is_better_factor: 1.0
+      eos_weight: 1.0
+      base_hop_cost: 1.0
+      swts_cost: 1.0
+      hwts_cost: 0.5
+      latency_analysis_enable: true
+  
+  cli:
+    enable: true
+    bind_port: 8080
+    bind_host: "127.0.0.1"
+    server_key: ""
+    username: ""
+    password: ""
+  
+  http:
+    enable: true
+    bind_port: 8081
+    bind_host: "0.0.0.0"
+  
+  logging:
+    buffer_size: 1024
+    stdout:
+      enable: true
+    syslog:
+      enable: false
+      host: ""
+      port: 514
+
+output:
+  type: "native"
+  elasticsearch:
+    hosts: ["localhost:9200"]
+    protocol: "http"
+    api_key: ""
+    username: ""
+    password: ""
+    ssl:
+      certificate_authorities: []
+      certificate: ""
+      key: ""
+      verification_mode: "full"
+
+setup:
+  dashboards:
+    enabled: true
+    url: "http://localhost:5601"
+    directory: "/usr/share/shiwatime/kibana"
+  ilm:
+    enabled: true
+    policy_name: "shiwatime"
+    policy_file: "/etc/shiwatime/ilm_policy.json"
+    check_exists: true
+
+name: "shiwatime-timesource"
+tags: ["timesource", "ntp", "ptp", "gps", "pps", "phc"]
+fields:
+  environment: "production"
+  datacenter: "dc1"
+  rack: "rack1"

@@ -52,6 +52,11 @@ type SourceInfo struct {
 	PHCIndex      int
 	PHCMaxAdj     int64
 	PHCPPSAvail   bool
+	
+	// TimeSource specific
+	TimeSourceType string
+	TimeSourceMode string
+	TimeSourceConfig map[string]interface{}
 }
 
 // PTPMasterInfo информация о PTP мастере
@@ -238,6 +243,7 @@ const webTemplate = `
         .protocol-pps { background-color: #fed7d7; color: #742a2a; }
         .protocol-phc { background-color: #faf5ff; color: #553c9a; }
         .protocol-nmea { background-color: #feebcb; color: #744210; }
+        .protocol-timesource { background-color: #e6fffa; color: #234e52; }
         
         .advanced-stats {
             display: grid;
@@ -466,6 +472,31 @@ const webTemplate = `
                                 <span class="metric-label">PPS доступен</span>
                                 <span class="metric-value">{{if .PHCPPSAvail}}Да{{else}}Нет{{end}}</span>
                             </div>
+                        </div>
+                        {{else if eq .Type "timesource"}}
+                        <div class="protocol-details">
+                            {{if .TimeSourceType}}
+                            <div class="metric">
+                                <span class="metric-label">Тип источника</span>
+                                <span class="metric-value">{{.TimeSourceType}}</span>
+                            </div>
+                            {{end}}
+                            {{if .TimeSourceMode}}
+                            <div class="metric">
+                                <span class="metric-label">Режим работы</span>
+                                <span class="metric-value">{{.TimeSourceMode}}</span>
+                            </div>
+                            {{end}}
+                            {{if .TimeSourceConfig}}
+                            <div class="metric">
+                                <span class="metric-label">Конфигурация</span>
+                                <span class="metric-value">
+                                    {{range $key, $value := .TimeSourceConfig}}
+                                    <div>{{$key}}: {{$value}}</div>
+                                    {{end}}
+                                </span>
+                            </div>
+                            {{end}}
                         </div>
                         {{end}}
                     </div>
@@ -697,6 +728,8 @@ func (h *WebHandler) buildSourcesInfo() []SourceInfo {
 
 // addProtocolSpecificInfo добавляет протокол-специфичную информацию
 func (h *WebHandler) addProtocolSpecificInfo(info *SourceInfo, handler protocols.TimeSourceHandler) {
+	config := handler.GetConfig()
+	
 	switch info.Type {
 	case "ptp":
 		// Пытаемся получить PTP-специфичную информацию
@@ -728,6 +761,12 @@ func (h *WebHandler) addProtocolSpecificInfo(info *SourceInfo, handler protocols
 	case "phc":
 		// PHC информация - интерфейс PHCHandler не определен, пропускаем специфичную информацию
 		// TODO: Добавить PHCHandler interface для получения PHC-специфичной информации
+		
+	case "timesource":
+		// TimeSource информация
+		info.TimeSourceType = config.TimeSourceType
+		info.TimeSourceMode = config.TimeSourceMode
+		info.TimeSourceConfig = config.TimeSourceConfig
 	}
 }
 
