@@ -85,6 +85,11 @@ type TimeSourceConfig struct {
 	TimecardType  string `yaml:"timecard_type" json:"timecard_type"`
 	Refclock      string `yaml:"refclock" json:"refclock"`
 	
+	// TimeSource-specific fields
+	TimeSourceType string `yaml:"timesource_type" json:"timesource_type"`
+	TimeSourceMode string `yaml:"timesource_mode" json:"timesource_mode"`
+	TimeSourceConfig map[string]interface{} `yaml:"timesource_config" json:"timesource_config"`
+	
 	// Polling configuration
 	PollingInterval time.Duration `yaml:"polling_interval" json:"polling_interval"`
 	PollingBurst    int           `yaml:"polling_burst" json:"polling_burst"`
