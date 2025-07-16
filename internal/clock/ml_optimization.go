@@ -1,15 +1,13 @@
 package clock
 
 import (
-	"context"
-	"fmt"
 	"math"
+	"math/rand"
 	"sync"
 	"time"
 
 	"github.com/sirupsen/logrus"
 	"gonum.org/v1/gonum/mat"
-	"gonum.org/v1/gonum/optimize"
 )
 
 // MLOptimizer представляет оптимизатор на основе машинного обучения
@@ -743,7 +741,7 @@ func (em *EnsembleModel) calculateEnsembleConfidence(predictions []*Optimization
 	var totalWeight float64
 	var weightedConfidence float64
 	
-	for i, weight := range weights {
+	for _, weight := range weights {
 		totalWeight += weight
 		// Simplified confidence calculation
 		weightedConfidence += weight * 0.8 // Default confidence per model

@@ -14,7 +14,6 @@ type Config struct {
 
 // ShiwaTimeConfig содержит основные настройки синхронизации времени
 type ShiwaTimeConfig struct {
-	License    LicenseConfig    `yaml:"license"`
 	Config     ConfigPaths      `yaml:"config"`
 	ClockSync  ClockSyncConfig  `yaml:"clock_sync"`
 	PTPTuning  PTPTuningConfig  `yaml:"ptp_tuning"`
@@ -23,11 +22,6 @@ type ShiwaTimeConfig struct {
 	CLI        CLIConfig        `yaml:"cli"`
 	HTTP       HTTPConfig       `yaml:"http"`
 	Logging    LoggingConfig    `yaml:"logging"`
-}
-
-// LicenseConfig настройки лицензии
-type LicenseConfig struct {
-	KeyFile string `yaml:"keyfile"`
 }
 
 // ConfigPaths пути к дополнительным конфигурационным файлам

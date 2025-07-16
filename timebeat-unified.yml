@@ -8,8 +8,7 @@
 
 timebeat:
 
-  # Location of license key file for premium features
-  license.keyfile: '/etc/timebeat/timebeat.lic'
+
 
   # Location of peer identities config file
   config.peerids: '/etc/timebeat/peerids.json'

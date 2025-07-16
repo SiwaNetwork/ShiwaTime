@@ -8,10 +8,6 @@
 
 shiwatime:
 
-  # Расположение файла лицензии для премиум функций
-  license:
-    keyfile: '/etc/shiwatime/shiwatime.lic'
-
   # Расположение файла конфигурации peer identities
   config:
     peerids: '/etc/shiwatime/peerids.json'
