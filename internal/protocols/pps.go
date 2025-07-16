@@ -249,6 +249,18 @@ func (h *ppsHandler) GetConfig() config.TimeSourceConfig {
 	return h.config
 }
 
+// GetGNSSInfo возвращает GNSS информацию (PPS не поддерживает GNSS напрямую)
+func (h *ppsHandler) GetGNSSInfo() GNSSStatus {
+	return GNSSStatus{
+		FixType:         0, // No fix
+		FixQuality:      0,
+		SatellitesUsed:  0,
+		SatellitesVisible: 0,
+		HDOP:            0,
+		VDOP:            0,
+	}
+}
+
 // GetEventCount возвращает количество обработанных PPS событий
 func (h *ppsHandler) GetEventCount() uint64 {
 	h.mu.RLock()

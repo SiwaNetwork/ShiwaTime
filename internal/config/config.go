@@ -85,6 +85,14 @@ type TimeSourceConfig struct {
 	TimecardType  string `yaml:"timecard_type" json:"timecard_type"`
 	Refclock      string `yaml:"refclock" json:"refclock"`
 	
+	// OCP Timecard-specific fields
+	OCPDevice     int      `yaml:"ocp_device" json:"ocp_device"`
+	OscillatorType string  `yaml:"oscillator_type" json:"oscillator_type"`
+	CardConfig    []string `yaml:"card_config" json:"card_config"`
+	Offset        int64    `yaml:"offset" json:"offset"` // nanoseconds
+	Atomic        bool     `yaml:"atomic" json:"atomic"`
+	MonitorOnly   bool     `yaml:"monitor_only" json:"monitor_only"`
+	
 	// TimeSource-specific fields
 	TimeSourceType string `yaml:"timesource_type" json:"timesource_type"`
 	TimeSourceMode string `yaml:"timesource_mode" json:"timesource_mode"`

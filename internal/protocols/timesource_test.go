@@ -155,8 +155,8 @@ func TestTimeSourceHandler_GetTimeInfo(t *testing.T) {
 
 	config := config.TimeSourceConfig{
 		Type:           "timesource",
-		TimesourceType: "mock",
-		TimesourceMode: "test",
+		TimeSourceType: "mock",
+		TimeSourceMode: "test",
 		Weight:         1,
 	}
 
@@ -204,8 +204,8 @@ func TestTimeSourceHandler_GetStatus(t *testing.T) {
 
 	config := config.TimeSourceConfig{
 		Type:           "timesource",
-		TimesourceType: "mock",
-		TimesourceMode: "test",
+		TimeSourceType: "mock",
+		TimeSourceMode: "test",
 		Weight:         1,
 	}
 
@@ -248,8 +248,8 @@ func TestTimeSourceHandler_ConcurrentAccess(t *testing.T) {
 
 	config := config.TimeSourceConfig{
 		Type:           "timesource",
-		TimesourceType: "mock",
-		TimesourceMode: "test",
+		TimeSourceType: "mock",
+		TimeSourceMode: "test",
 		Weight:         1,
 	}
 
@@ -303,8 +303,8 @@ func TestTimeSourceHandler_InvalidOperations(t *testing.T) {
 
 	config := config.TimeSourceConfig{
 		Type:           "timesource",
-		TimesourceType: "mock",
-		TimesourceMode: "test",
+		TimeSourceType: "mock",
+		TimeSourceMode: "test",
 		Weight:         1,
 	}
 

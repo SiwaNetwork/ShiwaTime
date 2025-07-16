@@ -215,6 +215,13 @@ func (h *nmeaHandler) GetPosition() *Position {
     return &h.position
 }
 
+// GetGNSSInfo returns latest GNSSStatus snapshot
+func (h *nmeaHandler) GetGNSSInfo() GNSSStatus {
+    h.mu.RLock()
+    defer h.mu.RUnlock()
+    return h.gnssStatus
+}
+
 // ParseNMEA implements a basic subset of RMC/ZDA sentences for time.
 func (h *nmeaHandler) ParseNMEA(line string) error {
     if !strings.HasPrefix(line, "$GP") {

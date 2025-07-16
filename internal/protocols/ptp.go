@@ -296,6 +296,18 @@ func (h *ptpHandler) GetConfig() config.TimeSourceConfig {
 	return h.config
 }
 
+// GetGNSSInfo возвращает GNSS информацию (PTP не поддерживает GNSS напрямую)
+func (h *ptpHandler) GetGNSSInfo() GNSSStatus {
+	return GNSSStatus{
+		FixType:         0, // No fix
+		FixQuality:      0,
+		SatellitesUsed:  0,
+		SatellitesVisible: 0,
+		HDOP:            0,
+		VDOP:            0,
+	}
+}
+
 // GetClockIdentity возвращает clock identity
 func (h *ptpHandler) GetClockIdentity() string {
 	return fmt.Sprintf("%x", h.clockID)

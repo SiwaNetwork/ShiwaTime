@@ -219,6 +219,18 @@ func (h *phcHandler) GetConfig() config.TimeSourceConfig {
 	return h.config
 }
 
+// GetGNSSInfo возвращает GNSS информацию (PHC не поддерживает GNSS напрямую)
+func (h *phcHandler) GetGNSSInfo() GNSSStatus {
+	return GNSSStatus{
+		FixType:         0, // No fix
+		FixQuality:      0,
+		SatellitesUsed:  0,
+		SatellitesVisible: 0,
+		HDOP:            0,
+		VDOP:            0,
+	}
+}
+
 // GetCapabilities возвращает возможности PHC
 func (h *phcHandler) GetCapabilities() PHCCapabilities {
 	h.mu.RLock()

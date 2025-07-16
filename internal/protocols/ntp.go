@@ -216,6 +216,18 @@ func (h *ntpHandler) GetConfig() config.TimeSourceConfig {
 	return h.config
 }
 
+// GetGNSSInfo возвращает GNSS информацию (NTP не поддерживает GNSS)
+func (h *ntpHandler) GetGNSSInfo() GNSSStatus {
+	return GNSSStatus{
+		FixType:         0, // No fix
+		FixQuality:      0,
+		SatellitesUsed:  0,
+		SatellitesVisible: 0,
+		HDOP:            0,
+		VDOP:            0,
+	}
+}
+
 // GetStratum возвращает stratum сервера
 func (h *ntpHandler) GetStratum() int {
 	h.mu.RLock()
