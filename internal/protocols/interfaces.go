@@ -15,6 +15,13 @@ type TimeInfo struct {
 	Quality   int           // Качество источника (0-255)
 	Stratum   int           // Stratum для NTP
 	Precision int           // Точность источника
+
+	// GNSS/Position related (optional)
+	Latitude  float64 // градусы
+	Longitude float64 // градусы
+	Altitude  float64 // метры
+	FixType   int     // тип фикса
+	SatellitesUsed int // используемые спутники
 }
 
 // TimeSourceHandler интерфейс обработчика источника времени

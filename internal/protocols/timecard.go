@@ -26,6 +26,8 @@ type timecardHandler struct {
 	lastPPSTime  time.Time
 	gnssFixValid bool
 	lastOffset   time.Duration
+	gnssStatus   GNSSStatus
+	position     Position
 	// internal
 	wg       sync.WaitGroup
 	ctx       context.Context
@@ -126,6 +128,11 @@ func (h *timecardHandler) GetTimeInfo() (*TimeInfo, error) {
 		Delay:     0,
 		Quality:   quality,
 		Precision: -9,
+		Latitude:  h.position.Latitude,
+		Longitude: h.position.Longitude,
+		Altitude:  h.position.Altitude,
+		FixType:   h.gnssStatus.FixType,
+		SatellitesUsed: h.gnssStatus.SatellitesUsed,
 	}, nil
 }
 
@@ -139,6 +146,13 @@ func (h *timecardHandler) GetStatus() ConnectionStatus {
 // GetConfig возвращает конфигурацию
 func (h *timecardHandler) GetConfig() config.TimeSourceConfig {
 	return h.config
+}
+
+// GetGNSSInfo returns latest GNSSStatus snapshot
+func (h *timecardHandler) GetGNSSInfo() GNSSStatus {
+    h.mu.RLock()
+    defer h.mu.RUnlock()
+    return h.gnssStatus
 }
 
 // monitorLoop периодически считывает статус карты или имитирует данные
@@ -225,6 +239,19 @@ func (h *timecardHandler) readRegisters() (time.Time, uint64, bool, error) {
 	// GNSS fix / sats
 	fixReg := h.drv.ReadU32(tcRegGnssFix)
 	gnssValid := (fixReg & 0x1) == 1
+	fixType := int((fixReg >> 1) & 0x7)
+	satsReg := h.drv.ReadU32(tcRegGnssSats)
+	satsUsed := int(satsReg & 0xFF)
+	satsView := int((satsReg >> 8) & 0xFF)
+
+	// positionLat/Lon/Alt
+	latRaw := int32(h.drv.ReadU32(tcRegGnssLat))
+	lonRaw := int32(h.drv.ReadU32(tcRegGnssLon))
+	altRaw := int32(h.drv.ReadU32(tcRegGnssAlt))
+	lat := float64(latRaw) / 1e7
+	lon := float64(lonRaw) / 1e7
+	alt := float64(altRaw) / 1000.0 // to metres
+
 	// Build timestamp from ToD
 	secLo := uint64(h.drv.ReadU32(tcRegTodSecL))
 	secHi := uint64(h.drv.ReadU32(tcRegTodSecH) & 0xFFFF)
@@ -234,5 +261,14 @@ func (h *timecardHandler) readRegisters() (time.Time, uint64, bool, error) {
 	if lastNs != 0 {
 		ppsTime = time.Unix(int64(utcSec), lastNs)
 	}
+
+	// store gnss data
+	h.mu.Lock()
+	h.gnssStatus.FixType = fixType
+	h.gnssStatus.SatellitesUsed = satsUsed
+	h.gnssStatus.SatellitesVisible = satsView
+	h.position = Position{Latitude: lat, Longitude: lon, Altitude: alt, Timestamp: ppsTime}
+	h.mu.Unlock()
+
 	return ppsTime, ppsCnt, gnssValid, nil
 }
